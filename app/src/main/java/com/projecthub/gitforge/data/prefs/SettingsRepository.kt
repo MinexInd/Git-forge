@@ -66,6 +66,14 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setOnboardingCompleted(completed: Boolean) = edit { it[Keys.ONBOARDING_DONE] = completed }
 
+    /** The client ID is public information, so it is stored with the other preferences. */
+    suspend fun setOAuthClientId(id: String) = edit { it[Keys.OAUTH_CLIENT_ID] = id.trim() }
+
+    suspend fun setGitAuthor(name: String, email: String) = edit {
+        it[Keys.GIT_AUTHOR_NAME] = name.trim()
+        it[Keys.GIT_AUTHOR_EMAIL] = email.trim()
+    }
+
     private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         context.settingsDataStore.edit(block)
     }
@@ -89,6 +97,9 @@ class SettingsRepository(private val context: Context) {
         warnBeforeRunningRepositoryScripts = this[Keys.WARN_REPO_SCRIPTS] ?: true,
         lastActiveRepositoryId = this[Keys.LAST_REPO_ID] ?: -1L,
         onboardingCompleted = this[Keys.ONBOARDING_DONE] ?: false,
+        oauthClientId = this[Keys.OAUTH_CLIENT_ID] ?: "",
+        gitAuthorName = this[Keys.GIT_AUTHOR_NAME] ?: AppSettings.DEFAULT_GIT_AUTHOR_NAME,
+        gitAuthorEmail = this[Keys.GIT_AUTHOR_EMAIL] ?: AppSettings.DEFAULT_GIT_AUTHOR_EMAIL,
     )
 
     private object Keys {
@@ -105,5 +116,8 @@ class SettingsRepository(private val context: Context) {
         val WARN_REPO_SCRIPTS = booleanPreferencesKey("warn_repo_scripts")
         val LAST_REPO_ID = longPreferencesKey("last_repo_id")
         val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
+        val OAUTH_CLIENT_ID = stringPreferencesKey("oauth_client_id")
+        val GIT_AUTHOR_NAME = stringPreferencesKey("git_author_name")
+        val GIT_AUTHOR_EMAIL = stringPreferencesKey("git_author_email")
     }
 }

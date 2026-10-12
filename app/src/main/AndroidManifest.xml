@@ -7,6 +7,18 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!--
+      The GitHub device flow shows a floating window that stays visible while the
+      user types the code in a browser, so sign-in completes without the app needing
+      to be in the foreground. SYSTEM_ALERT_WINDOW is what allows that window to draw
+      over other apps; if the user declines it the flow falls back to an in-app
+      dialog and still works.
+    -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
       The app deliberately requests no broad storage permission. All repositories live in
       app-private storage and user file import/export goes through the Storage Access
       Framework, which needs no manifest permission.
@@ -36,6 +48,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+          Runs the GitHub device flow in a floating window that outlives the activity.
+          Not exported: only GitForge can start it.
+        -->
+        <service
+            android:name=".ui.auth.GitHubAuthOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!--
           WorkManager is initialised on demand (see GitForgeApplication) rather than by the

@@ -21,6 +21,17 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
 
+        // Method A (the GitHub device flow) needs a public OAuth App client ID. A
+        // client ID is not a secret: the device flow exists precisely so that no
+        // client secret has to be shipped. It can be overridden per build with
+        // -PGITFORGE_OAUTH_CLIENT_ID=..., and at runtime in Settings, so a fork does
+        // not have to carry this value.
+        buildConfigField(
+            "String",
+            "DEFAULT_OAUTH_CLIENT_ID",
+            "\"${findProperty("GITFORGE_OAUTH_CLIENT_ID") ?: "Iv23li8KI2OKDHaDX4BN"}\"",
+        )
+
         ndk {
             // The Termux userspace packages GitForge installs on demand are built
             // for arm64-v8a. Nothing native is bundled in the APK, so this only

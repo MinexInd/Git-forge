@@ -6,6 +6,7 @@ import com.projecthub.gitforge.di.AppContainer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -37,9 +38,13 @@ class GitForgeApplication : Application() {
                 }
             }.onFailure { AppLog.w("Startup cleanup failed", it) }
 
-            // Warm the settings cache so the first frame uses the saved theme.
-            runCatching { container.settingsRepository.current() }
-                .onFailure { AppLog.w("Could not load settings", it) }
+            // Warm the settings cache so the first frame uses the saved theme, and
+            // keep it warm so the synchronous mirrors of persisted settings (the
+            // OAuth client ID and the commit identity) stay correct.
+            runCatching {
+                container.settingsRepository.current()
+                container.settingsRepository.settings.collect {}
+            }.onFailure { AppLog.w("Could not load settings", it) }
         }
     }
 

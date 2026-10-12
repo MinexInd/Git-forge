@@ -1,6 +1,7 @@
 package com.projecthub.gitforge.di
 
 import android.content.Context
+import com.projecthub.gitforge.BuildConfig
 import com.projecthub.gitforge.core.AppLog
 import com.projecthub.gitforge.core.DefaultAppDispatchers
 import com.projecthub.gitforge.data.db.GitForgeDatabase
@@ -25,6 +26,7 @@ import com.projecthub.gitforge.workspace.FileTreeReader
 import com.projecthub.gitforge.workspace.WorkspaceManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import java.io.File
 
@@ -86,10 +88,21 @@ class AppContainer(private val context: Context) {
 
     /**
      * The OAuth client ID is public information and safe in the APK: the device flow
-     * exists precisely so that no client *secret* is needed. Users who prefer their
-     * own app registration can override it in Settings.
+     * exists precisely so that no client *secret* is needed. The app ships with a
+     * default (see BuildConfig.DEFAULT_OAUTH_CLIENT_ID); an override entered in
+     * Settings wins, and is persisted so it survives a restart instead of having to
+     * be re-entered on every launch.
      */
-    var oauthClientId: String? = null
+    var oauthClientId: String?
+        get() = settingsRepository.snapshot().oauthClientId
+            .ifBlank { BuildConfig.DEFAULT_OAUTH_CLIENT_ID }
+            .ifBlank { null }
+        set(value) {
+            applicationScope.launch {
+                runCatching { settingsRepository.setOAuthClientId(value.orEmpty()) }
+                    .onFailure { AppLog.w("Could not save the OAuth client ID", it) }
+            }
+        }
 
     // ----------------------------------------------------------------- terminal
 
@@ -128,14 +141,20 @@ class AppContainer(private val context: Context) {
         ShellInterpreterCommand(runtimeManager),
     )
 
-    /** Commit identity, configurable in Settings and used by both Git UI and terminal. */
+    /**
+     * Commit identity, configurable in Settings and used by both the Git UI and the
+     * terminal. It is persisted, so a configured identity survives a restart.
+     */
     fun commitIdentity(settings: com.projecthub.gitforge.data.prefs.AppSettings): Pair<String, String> =
         gitIdentity
 
-    var gitIdentity: Pair<String, String> = ("GitForge User" to "user@gitforge.local")
+    var gitIdentity: Pair<String, String>
+        get() = settingsRepository.snapshot().let { it.gitAuthorName to it.gitAuthorEmail }
         set(value) {
-            field = value
-            AppLog.i("Commit identity updated")
+            applicationScope.launch {
+                runCatching { settingsRepository.setGitAuthor(value.first, value.second) }
+                    .onFailure { AppLog.w("Could not save the commit identity", it) }
+            }
         }
 
     val workspaceRoot: File get() = workspaceManager.root
