@@ -24,8 +24,20 @@ data class AppSettings(
     val warnBeforeRunningRepositoryScripts: Boolean = true,
     val lastActiveRepositoryId: Long = -1L,
     val onboardingCompleted: Boolean = false,
+    /**
+     * Public OAuth client ID for the device flow. Not a secret: the whole point of
+     * the device flow is that no client secret is needed, so this is safe to keep
+     * in ordinary preferences. Empty means "not configured".
+     */
+    val oauthClientId: String = "",
+    /** Commit identity, editable in Settings and used by the Git UI and the terminal. */
+    val gitAuthorName: String = DEFAULT_GIT_AUTHOR_NAME,
+    val gitAuthorEmail: String = DEFAULT_GIT_AUTHOR_EMAIL,
 ) {
     companion object {
+        const val DEFAULT_GIT_AUTHOR_NAME = "GitForge User"
+        const val DEFAULT_GIT_AUTHOR_EMAIL = "user@gitforge.local"
+
         const val MIN_EDITOR_FONT_SP = 10
         const val MAX_EDITOR_FONT_SP = 28
         const val MIN_SCROLLBACK = 200

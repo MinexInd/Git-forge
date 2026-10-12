@@ -2,4 +2,23 @@
 <resources>
     <string name="app_name">GitForge</string>
     <string name="app_tagline">Code anywhere. Build everything.</string>
+
+    <!-- GitHub sign-in floating window -->
+    <string name="auth_overlay_title">Sign in to GitHub</string>
+    <string name="auth_overlay_instructions">Open the browser, enter this code, then approve access. Long-press the code to copy it.</string>
+    <string name="auth_status_preparing">Requesting a sign-in code…</string>
+    <string name="auth_status_waiting">Waiting for approval on GitHub…</string>
+    <string name="auth_open_browser">Open browser</string>
+    <string name="auth_cancel">Cancel</string>
+    <string name="auth_code_copied">Code copied</string>
+    <string name="auth_notification_title">GitForge GitHub sign-in</string>
+    <string name="auth_notification_starting">Starting sign-in…</string>
+    <string name="auth_notification_waiting">Waiting for you to approve the code on GitHub</string>
+    <string name="auth_channel_name">GitHub sign-in</string>
+    <string name="auth_success">Signed in as %1$s</string>
+    <string name="auth_success_fallback">GitHub</string>
+    <string name="auth_error_no_client_id">Set an OAuth client ID in Settings before connecting to GitHub.</string>
+    <string name="auth_error_no_overlay_permission">Permission to display over other apps is needed for the floating window.</string>
+    <string name="auth_error_no_browser">No browser is available to open the GitHub page.</string>
+    <string name="auth_permission_explanation">GitForge shows a small window that stays visible while you enter the code in a browser. This needs permission to display over other apps. The window only shows the sign-in code and never your token.</string>
 </resources>

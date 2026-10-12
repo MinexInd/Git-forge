@@ -42,6 +42,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -61,6 +63,8 @@ import com.projecthub.gitforge.data.prefs.ThemeMode
 import com.projecthub.gitforge.di.AppContainer
 import com.projecthub.gitforge.github.GitHubDeviceFlowAuth
 import com.projecthub.gitforge.ui.RepositoriesViewModel
+import com.projecthub.gitforge.ui.auth.GitHubAuthOverlayService
+import com.projecthub.gitforge.ui.auth.rememberOverlayPermissionRequest
 import com.projecthub.gitforge.ui.components.BannerTone
 import com.projecthub.gitforge.ui.components.DestructiveConfirmDialog
 import com.projecthub.gitforge.ui.components.InfoBanner
@@ -88,6 +92,33 @@ fun SettingsScreen(
     val reposState by repositoriesViewModel.state.collectAsStateWithLifecycle()
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
+    val appContext = LocalContext.current.applicationContext
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    // The effective client ID: the saved override, else the value compiled in.
+    val effectiveClientId = container.oauthClientId
+
+    // The floating window is the preferred path for Method A: it stays on screen while
+    // the user is in the browser. Refusing the permission degrades to the in-app dialog.
+    var useFloatingWindow by remember { mutableStateOf(false) }
+    val overlayPermission = rememberOverlayPermissionRequest { granted ->
+        if (granted) {
+            useFloatingWindow = true
+            GitHubAuthOverlayService.start(appContext)
+        }
+    }
+
+    // When the floating window signs in, the service has already stored the token, so
+    // refresh the state the moment the app comes back to the foreground.
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && useFloatingWindow) {
+                repositoriesViewModel.refreshGitHubState()
+                repositoriesViewModel.loadRemoteRepositories(reset = true)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     var showTokenDialog by remember { mutableStateOf(false) }
     var showDisconnectConfirm by remember { mutableStateOf(false) }
@@ -288,10 +319,47 @@ fun SettingsScreen(
                     Spacer(Modifier.height(12.dp))
 
                     if (!reposState.gitHubConnected) {
-                        Button(onClick = { deviceFlowState = DeviceFlowUiState.Preparing }) {
+                        Button(
+                            // The device flow cannot start without a client ID, so this is the
+                            // one control that stays disabled until the user configures it.
+                            enabled = effectiveClientId != null,
+                            onClick = {
+                                if (overlayPermission.granted) {
+                                    useFloatingWindow = true
+                                    GitHubAuthOverlayService.start(appContext)
+                                } else {
+                                    // Ask for the floating-window permission first; the
+                                    // launcher callback starts the service once granted, and
+                                    // falls through to the in-app dialog if it is refused.
+                                    overlayPermission.request()
+                                    useFloatingWindow = false
+                                }
+                            },
+                        ) {
                             Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("Connect with GitHub")
+                        }
+                        if (effectiveClientId == null) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Disabled until an OAuth client ID is available. Set one below.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Opens a floating window so the code stays visible while you " +
+                                    "approve it in a browser. Signing in here still requires you " +
+                                    "to confirm on GitHub.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            TextButton(onClick = { deviceFlowState = DeviceFlowUiState.Preparing }) {
+                                Text("Use the in-app dialog instead")
+                            }
                         }
                         Spacer(Modifier.height(8.dp))
                         OutlinedButton(onClick = { showTokenDialog = true }) {
@@ -343,8 +411,17 @@ fun SettingsScreen(
 
                     Spacer(Modifier.height(12.dp))
                     TextButton(onClick = { showClientIdDialog = true }) {
-                        Text("Set a custom OAuth client ID")
+                        Text("Change OAuth client ID")
                     }
+                    Text(
+                        if (settings.oauthClientId.isBlank()) {
+                            "Using the client ID built into this app. You can override it here."
+                        } else {
+                            "Saved. The client ID is public information, so it is kept with your other preferences."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -524,11 +601,11 @@ fun SettingsScreen(
 
     if (showIdentityDialog) {
         IdentityDialog(
-            initialName = container.gitIdentity.first,
-            initialEmail = container.gitIdentity.second,
+            initialName = settings.gitAuthorName,
+            initialEmail = settings.gitAuthorEmail,
             onDismiss = { showIdentityDialog = false },
             onSave = { name, email ->
-                container.gitIdentity = name to email
+                scope.launch { container.settingsRepository.setGitAuthor(name, email) }
                 showIdentityDialog = false
             },
         )
@@ -536,10 +613,12 @@ fun SettingsScreen(
 
     if (showClientIdDialog) {
         ClientIdDialog(
-            initial = container.oauthClientId.orEmpty(),
+            initial = effectiveClientId.orEmpty(),
             onDismiss = { showClientIdDialog = false },
             onSave = { id ->
-                container.oauthClientId = id.ifBlank { null }
+                // Persisted, so the client ID survives a restart instead of having
+                // to be re-entered on every launch.
+                scope.launch { container.settingsRepository.setOAuthClientId(id) }
                 showClientIdDialog = false
             },
         )
@@ -836,9 +915,10 @@ private fun ClientIdDialog(
         text = {
             Column {
                 Text(
-                    "The device flow needs a public OAuth App client ID. This is not a secret and is safe to store " +
-                        "on the device. Register an OAuth App on GitHub with the device flow enabled, then paste its " +
-                        "client ID here.",
+                    "Method A needs a public OAuth App client ID. This is not a secret and is safe to store on " +
+                        "the device, so it is saved with your other preferences and does not need re-entering later. " +
+                        "On GitHub open Settings, Developer settings, OAuth Apps, create an app, enable Device Flow, " +
+                        "then paste its client ID here.",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Spacer(Modifier.height(12.dp))

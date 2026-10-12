@@ -350,20 +350,38 @@ not.
 
 ### Option B — OAuth device flow (no token copying)
 
-1. Register an OAuth app at **GitHub → Settings → Developer settings → OAuth Apps →
-   New OAuth App**. Any name and homepage will do; the device flow does not use a
-   callback URL.
-2. Enable **Device flow** on the app's settings page.
-3. Copy the **Client ID** (a public identifier, not a secret).
-4. In GitForge, open **Settings → GitHub account → OAuth client ID**, paste it, then
-   choose **Sign in with GitHub**.
-5. GitForge shows a short code. Approve it in the browser that opens, and the token
-   arrives on the device.
+This is the default. GitForge ships with a public client ID already compiled in
+(`BuildConfig.DEFAULT_OAUTH_CLIENT_ID`), so there is normally nothing to configure:
+
+1. Open **Settings → GitHub and security**.
+2. Choose **Connect with GitHub**. GitForge asks for permission to display over other
+   apps, then opens a floating window showing a short code such as `35BD-DA5A`.
+3. Choose **Open browser**, enter the code, and approve access on GitHub. The window
+   stays visible the whole time, so the code does not disappear while you are in the
+   browser.
+4. GitForge verifies the token with `GET /user` and stores it in the Keystore-backed
+   credential store.
+
+To use your own OAuth app instead, register one at **GitHub → Settings → Developer
+settings → OAuth Apps → New OAuth App**, enable **Device flow**, then paste its
+**Client ID** into **Settings → GitHub and security → Change OAuth client ID**. The
+override is persisted, so it only has to be entered once.
+
+There is no callback URL in this flow, and GitHub never redirects back to the app.
+The device flow does not use one, which is why no client secret is needed and why
+nothing secret is embedded in the APK. If GitHub's OAuth app form insists on a value
+for *Authorization callback URL*, any valid URL works — it is stored but never
+contacted.
+
+The floating window is optional. Declining the over-other-apps permission leaves the
+flow fully working through the in-app dialog; only the ability to see the code while
+the browser is in the foreground is lost. If the app is closed mid-sign-in, reopen it
+and connect again — a code that has not been approved cannot be replayed.
 
 > A client **secret** is never requested and never stored. The device flow is
 > designed so that a public client can obtain a token without one.
 
-To disconnect, use **Settings → GitHub account → Disconnect**. The stored token is
+To disconnect, use **Settings → GitHub and security → Disconnect**. The stored token is
 deleted from the Keystore-backed store.
 
 ---
@@ -563,6 +581,9 @@ app\build\outputs\bundle\release\app-release.aab
 | --- | --- |
 | Token storage | `EncryptedSharedPreferences` backed by the Android Keystore |
 | Client secret | Never requested and never embedded; the device flow is used instead |
+| OAuth client ID | Public by design, compiled in as `BuildConfig.DEFAULT_OAUTH_CLIENT_ID` and overridable in Settings |
+| Overlay permission | Used only to show the sign-in code over the browser. The window never displays the token, and the flow works without the permission |
+| Sign-in code | Public, short-lived and single-use; shown in the window and long-pressable to copy |
 | Remote URLs | Stored without userinfo; the credential is supplied in memory at push time |
 | Logs and errors | Every message passes through `Redaction`, which strips tokens from URLs, headers and free text |
 | Repository content | Treated as untrusted; scripts in a cloned repository are never executed automatically |
@@ -675,16 +696,26 @@ This section exists so nothing is overstated.
    built. The APK was compiled and its manifest inspected with `aapt2`, but it was
    **not** installed or launched. Installation instructions are provided and are
    standard, but the installation itself is unverified.
-2. **No GitHub account or network access was available**, so the end-to-end flow
-   (connect, clone, edit, commit, push, verify the remote) was not executed. The API
-   client and the device flow are implemented and compile, but they have not been run
-   against the live service.
-3. **The runtime download was not exercised.** Package versions and checksums are
+2. **No GitHub account was available**, so the end-to-end flow (connect, clone,
+   edit, commit, push, verify the remote) was not executed. What *was* verified
+   against the live service is the device-flow handshake: the client ID compiled into
+   the app (`Iv23li8KI2OKDHaDX4BN`) successfully obtained a device code from
+   `POST /login/device/code`, and the polling leg returned `authorization_pending`
+   with no token, exactly as RFC 8628 requires before the user approves. Everything
+   after approval — token exchange, clone, push — is implemented and unit-tested but
+   has not been run against GitHub.
+3. **The floating sign-in window has not been shown on a real device.** The service
+   compiles, is registered in the manifest as a non-exported `dataSync` foreground
+   service, and the over-other-apps permission is present, but `TYPE_APPLICATION_OVERLAY`
+   behaviour (position, drag, keyboard interaction) can only be confirmed on hardware.
+   The in-app dialog path is a working fallback if the permission is refused.
+4. **The runtime download was not exercised.** Package versions and checksums are
    recorded in `RuntimePackageRegistry` and covered by unit tests, but no `.deb` was
    actually downloaded or unpacked, because that needs a device and network.
-4. **The Compose UI has no automated tests.** Unit tests cover the engine, file
-   layer, shell and parsers; the screens were not driven by instrumented tests.
-5. **`arm64-v8a` on real hardware** is the intended target and the only ABI for which
+5. **The Compose UI has no automated tests.** Unit tests cover the engine, file
+   layer, shell, parsers and settings persistence; the screens were not driven by
+   instrumented tests.
+6. **`arm64-v8a` on real hardware** is the intended target and the only ABI for which
    the userspace is published, but it has not been confirmed on a physical phone.
 
 ---
