@@ -29,6 +29,10 @@ built APK:
 Requires Android 8.0 (API 26) or newer. The APK is signed and targets `arm64-v8a`
 (most phones), with `armeabi-v7a` and `x86_64` also offered.
 
+> **Version 1.0.1 fixes the terminal.** If commands produced no output, or a
+> userspace command reported "cannot execute", install 1.0.1 or later. See
+> [Fixed in 1.0.1](#fixed-in-101).
+
 If you would rather build it yourself, see
 [Building the APK](#building-the-apk) below — that path does need the SDK.
 
@@ -54,6 +58,7 @@ If you would rather build it yourself, see
 - [Security model](#security-model)
 - [Dependency and licence inventory](#dependency-and-licence-inventory)
 - [Known limitations](#known-limitations)
+- [Troubleshooting with Diagnostics](#troubleshooting-with-diagnostics)
 - [Unverified work](#unverified-work)
 - [Project layout](#project-layout)
 
@@ -329,15 +334,20 @@ or just the debug variant:
 .\gradlew.bat testDebugUnitTest
 ```
 
-The suite is 111 JVM unit tests and needs no device. It covers:
+The suite is 133 JVM unit tests and needs no device. It covers:
 
 | Area | Test file | What it proves |
 | --- | --- | --- |
+| Launch path | `LaunchPathTest.kt` | The exact code the app runs at startup — settings, workspace, database, file tree, Git engine, credential store, repository ViewModel — all initialise |
+| Subsystems | `SubsystemSmokeTest.kt` | Every ViewModel and every lazily built service constructs and its first work runs |
 | Path validation | `core/PathSafetyTest.kt` | Traversal, absolute paths, Windows drive paths, sibling-prefix escapes and name validation are all refused |
 | Credential redaction | `core/RedactionTest.kt` | Tokens of every GitHub shape are removed from logs, remote URLs and error text |
+| Diagnostics log | `core/DiagnosticsLogTest.kt` | A token written to the log is redacted, and the in-memory buffer stays bounded |
 | Editor file layer | `workspace/FileOperationsTest.kt` | Real reads and writes, CRLF/LF preservation, conflicting-save refusal, binary detection, large-file truncation, search, file tree |
 | Git engine | `git/GitEngineTest.kt` | Real repositories: status, diffs, staging, commits, branches, merge conflicts, revert, remotes, persistence across reopen |
 | Shell | `terminal/ShellEngineTest.kt` | Real command execution: `cd`, `mkdir`, `touch`, redirection, pipes, `grep`, `sed`, `head`, `tail`, `uniq`, `cp`, `mv`, `rm`, `find`, `export`, history, exit codes |
+| Shell output routing | `terminal/shell/ShellOutputTest.kt` | A builtin's output reaches the terminal, and redirecting one stream does not swallow the other |
+| Process launching | `terminal/runtime/ProcessInvocationTest.kt` | On API 29+ an app-data binary is routed through the system linker; on older APIs it is started directly; the ELF class picks the right linker |
 | ANSI parsing | `terminal/AnsiParserTest.kt` | Colours, reset, bold, split sequences, carriage returns |
 | Runtime manifest | `terminal/AnsiParserTest.kt` | Every downloadable package has a version, filename, 64-character SHA-256 and positive size |
 
@@ -680,6 +690,29 @@ version and SHA-256 before installing it.
 
 ---
 
+## Troubleshooting with Diagnostics
+
+You do not need adb or logcat to see what went wrong. GitForge keeps its own log and
+its own crash record inside the app.
+
+1. Open **Diagnostics** from the navigation drawer, or from **Settings → About →
+   Open Diagnostics**.
+2. The screen shows the device and ABI, the previous crash (if the last run ended
+   badly), and the recent app log.
+3. Use **Share** to send the text to yourself or a maintainer, **Copy** to put it on
+   the clipboard, and **Refresh** to re-read the log after reproducing a problem.
+
+Everything shown there has already passed through the same redaction that protects
+logcat, so a token does not appear. Nothing is uploaded automatically: sharing is
+always a deliberate action.
+
+If the app closes immediately on launch, reopen it and check Diagnostics — the crash
+from the previous run is recorded there. The log file lives at
+`files/diagnostics/gitforge.log` and the crash record at
+`files/diagnostics/last-crash.txt`, both inside app-private storage.
+
+---
+
 ## Known limitations
 
 - **Architecture.** The userspace packages are `arm64-v8a`. The APK declares
@@ -687,6 +720,14 @@ version and SHA-256 before installing it.
   runtime download is not usable. Most modern phones are arm64 and are fine.
 - **No root.** GitForge runs inside the normal Android sandbox. It cannot install
   system packages, cannot bind privileged ports, and cannot see other apps' data.
+- **Executing userspace binaries (W^X).** On Android 10 and later an app whose
+  `targetSdkVersion` is 29 or higher may not `execve()` a file in its own data
+  directory. GitForge therefore starts every downloaded userspace binary through the
+  system linker (`/system/bin/linker64 <binary> …`), which the platform does permit
+  to run app-data files. This is why the terminal works without root, and it is the
+  single place process launching happens
+  (`terminal/runtime/ProcessInvocation.kt`). A command that still reports
+  "cannot execute" is a genuine per-binary problem, not the W^X rule.
 - **Android's filesystem.** `/tmp`, `/usr`, `/etc` and `/dev` do not exist as they do
   on a desktop. The userspace supplies its own prefix, and commands that assume a
   normal FHS layout need `PREFIX`-relative paths.
@@ -739,6 +780,37 @@ This section exists so nothing is overstated.
    instrumented tests.
 6. **`arm64-v8a` on real hardware** is the intended target and the only ABI for which
    the userspace is published, but it has not been confirmed on a physical phone.
+
+### Fixed in 1.0.1
+
+Two defects were found and fixed after 1.0.0 was published. Both are covered by new
+tests, and both were found by running the real code, not by reading it.
+
+1. **Builtin commands produced no output.** `ls`, `pwd`, `cat`, `grep` and every other
+   builtin returned their stdout to the shell engine instead of streaming it to the
+   terminal, so the scrollback showed only the prompt and the exit code. The pipeline
+   now forwards a builtin's stdout and stderr to the terminal when the stream is not
+   redirected. See `terminal/shell/ShellEngine.kt` and `ShellOutputTest`.
+2. **Redirecting one stream discarded the other.** `cmd 2> err.txt` also swallowed
+   stdout, because the redirection helper returned a fresh, empty result whenever any
+   redirection was present. Redirection is now applied per stream, so `2>` no longer
+   affects stdout. See `applyRedirections` and `ShellOutputTest`.
+
+A third, larger issue was identified in the same review:
+
+3. **Userspace binaries could not be executed on Android 10+.** An app targeting
+   API 29 or later may not `execve()` a file in its own data directory (the W^X rule),
+   so a userspace binary unpacked into app storage would fail with "cannot execute"
+   and every terminal command would appear broken. Process launching now routes
+   app-data binaries through the system linker
+   (`/system/bin/linker64 <binary> …`), which the platform permits. See
+   `terminal/runtime/ProcessInvocation.kt` and `ProcessInvocationTest`. This is a
+   fix to a code path that had never been executed on a device; it is reasoned from
+   the platform rule and unit-tested, but **it has still not been observed working on
+   hardware.**
+
+To make any remaining failure diagnosable without adb, the app now keeps its own
+redacted log and crash record and exposes them on the **Diagnostics** screen.
 
 ---
 

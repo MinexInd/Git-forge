@@ -2,6 +2,8 @@ package com.projecthub.gitforge
 
 import android.app.Application
 import com.projecthub.gitforge.core.AppLog
+import com.projecthub.gitforge.core.CrashReporter
+import com.projecthub.gitforge.core.DiagnosticsLog
 import com.projecthub.gitforge.di.AppContainer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +27,14 @@ class GitForgeApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        // Diagnostics must be available before anything else can fail. The directory
+        // is app-private, so a report never leaves the device unless the user sends it.
+        val diagnosticsDir = File(filesDir, "diagnostics").apply { mkdirs() }
+        DiagnosticsLog.attach(diagnosticsDir)
+        CrashReporter.install(diagnosticsDir)
+        CrashReporter.lastCrash()?.let { AppLog.w("The previous run ended in a crash; see Diagnostics") }
+
         container = AppContainer(this)
         AppLog.i("GitForge starting on ${android.os.Build.MODEL} (${android.os.Build.SUPPORTED_ABIS.joinToString()})")
 

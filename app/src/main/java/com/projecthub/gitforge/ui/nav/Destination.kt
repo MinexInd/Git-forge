@@ -1,6 +1,7 @@
 package com.projecthub.gitforge.ui.nav
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Extension
@@ -73,6 +74,13 @@ enum class Destination(
         icon = Icons.Default.Settings,
         isPrimary = false,
         description = "Theme, editor, terminal, security and storage",
+    ),
+    DIAGNOSTICS(
+        route = "diagnostics",
+        label = "Diagnostics",
+        icon = Icons.Default.BugReport,
+        isPrimary = false,
+        description = "App log and crash reports",
     );
 
     companion object {

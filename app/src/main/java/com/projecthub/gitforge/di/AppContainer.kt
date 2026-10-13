@@ -11,6 +11,7 @@ import com.projecthub.gitforge.github.GitHubDeviceFlowAuth
 import com.projecthub.gitforge.git.GitEngine
 import com.projecthub.gitforge.security.CredentialStore
 import com.projecthub.gitforge.security.EncryptedCredentialStore
+import com.projecthub.gitforge.security.UnavailableCredentialStore
 import com.projecthub.gitforge.terminal.TerminalSessionManager
 import com.projecthub.gitforge.terminal.runtime.GitCommand
 import com.projecthub.gitforge.terminal.runtime.NodeCommand
@@ -59,19 +60,18 @@ class AppContainer(private val context: Context) {
 
     // ---------------------------------------------------------------- security
 
+    /**
+     * The credential store degrades instead of crashing. A device with an
+     * unavailable or corrupt Keystore gets an app that runs and explains that
+     * sign-in is disabled, rather than one that closes on launch — and the reason is
+     * written to Diagnostics, where the user can read it without adb.
+     */
     val credentialStore: CredentialStore by lazy {
-        try {
-            EncryptedCredentialStore(context)
-        } catch (t: Throwable) {
-            // A device with a broken Keystore must still get a working app that tells
-            // the user what happened, rather than a crash on launch.
-            AppLog.e("Encrypted credential storage is unavailable on this device", t)
-            throw IllegalStateException(
-                "GitForge could not open secure credential storage on this device. " +
-                    "Sign-in is disabled until the device Keystore is available.",
-                t,
-            )
-        }
+        runCatching { EncryptedCredentialStore(context) as CredentialStore }
+            .getOrElse { failure ->
+                AppLog.e("Secure credential storage is unavailable on this device", failure)
+                UnavailableCredentialStore(failure)
+            }
     }
 
     // --------------------------------------------------------------------- git

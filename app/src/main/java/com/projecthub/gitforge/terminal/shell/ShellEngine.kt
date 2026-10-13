@@ -97,9 +97,32 @@ class ShellEngine(
             currentCoroutineContext().ensureActive()
             val isLast = index == pipeline.stages.lastIndex
 
-            val result = runStage(ctx, stage, stdin, onOutput, emitToTerminal = isLast)
-            val redirected = applyRedirections(ctx, stage, result)
-            if (redirected != null) return redirected
+            // Each stream is redirected independently, so `cmd 2> err.txt` must still
+            // print stdout. Only the streams that are not redirected go to the screen.
+            val stdoutToTerminal = isLast && stage.stdoutFile == null
+            val stderrToTerminal = isLast && stage.stderrFile == null
+            val emit: (String, TerminalLine.Stream) -> Unit = { chunk, stream ->
+                val allowed = when (stream) {
+                    TerminalLine.Stream.STDERR -> stderrToTerminal
+                    else -> stdoutToTerminal
+                }
+                if (allowed) onOutput(chunk, stream)
+            }
+
+            val outcome = runStage(ctx, stage, stdin, emit)
+            val result = applyRedirections(ctx, stage, outcome.result)
+
+            // Builtins run in-process and return their stdout/stderr instead of
+            // streaming them, so without this their output would never be shown. The
+            // streams that were redirected are already empty in [result].
+            if (!outcome.streamedLive) {
+                if (stdoutToTerminal && result.stdout.isNotEmpty()) {
+                    onOutput(result.stdout, TerminalLine.Stream.STDOUT)
+                }
+                if (stderrToTerminal && result.stderr.isNotEmpty()) {
+                    onOutput(result.stderr, TerminalLine.Stream.STDERR)
+                }
+            }
 
             lastResult = result
             val (capped, truncated) = StreamLimiter.limit(result.stdout)
@@ -111,14 +134,16 @@ class ShellEngine(
         return lastResult
     }
 
+    /** A stage's result plus whether its output already reached the terminal live. */
+    private data class StageOutcome(val result: ShellRunOutput, val streamedLive: Boolean)
+
     private suspend fun runStage(
         ctx: ShellContext,
         stage: ShellStage,
         stdin: String,
         onOutput: (String, TerminalLine.Stream) -> Unit,
-        emitToTerminal: Boolean,
-    ): ShellRunOutput {
-        if (stage.words.isEmpty()) return ShellRunOutput("", "", 0)
+    ): StageOutcome {
+        if (stage.words.isEmpty()) return StageOutcome(ShellRunOutput("", "", 0), streamedLive = false)
 
         val words = expandGlobs(stage.words, ctx.cwd)
         val aliased = resolver.resolveAlias(words)
@@ -126,7 +151,7 @@ class ShellEngine(
         val args = aliased.drop(1)
 
         builtins.find(name)?.let { builtin ->
-            return try {
+            val result = try {
                 builtin.run(ctx, args, stdin)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -135,23 +160,26 @@ class ShellEngine(
                 // command error rather than an unhandled failure.
                 ShellRunOutput("", "$name: ${e.message ?: "I/O error"}\n", 1)
             }
+            return StageOutcome(result, streamedLive = false)
         }
 
         val external = resolver.external(name)
         if (external != null) {
             if (!external.available) {
-                return ShellRunOutput("", "$name: ${external.unavailableReason ?: "not installed"}\n", 127)
+                return StageOutcome(
+                    ShellRunOutput("", "$name: ${external.unavailableReason ?: "not installed"}\n", 127),
+                    streamedLive = false,
+                )
             }
-            return try {
-                external.execute(ctx, args, stdin) { chunk, stream ->
-                    if (emitToTerminal) onOutput(chunk, stream)
-                }
+            val result = try {
+                external.execute(ctx, args, stdin, onOutput)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Throwable) {
                 AppLog.w("External command $name failed", e)
                 ShellRunOutput("", "$name: ${e.message ?: "execution failed"}\n", 1)
             }
+            return StageOutcome(result, streamedLive = true)
         }
 
         val hint = if (name.contains('/')) {
@@ -159,20 +187,21 @@ class ShellEngine(
         } else {
             "command not found. Type 'help' for the built-in list, or open Packages to see installed runtimes."
         }
-        return ShellRunOutput("", "$name: $hint\n", 127)
+        return StageOutcome(ShellRunOutput("", "$name: $hint\n", 127), streamedLive = false)
     }
 
     /** Expands `*`/`?` patterns against the session working directory. */
     private fun expandGlobs(words: List<String>, cwd: File): List<String> =
         GlobExpander.expand(words, cwd)
 
-    /** Applies `>` `>>` `2>` `2>>` for a stage. Returns non-null when it handled the result. */
+    /** Applies `>` `>>` `2>` `2>>` for a stage, clearing only the streams it wrote. */
     private fun applyRedirections(
         ctx: ShellContext,
         stage: ShellStage,
         result: ShellRunOutput,
-    ): ShellRunOutput? {
-        var handled = false
+    ): ShellRunOutput {
+        var stdout = result.stdout
+        var stderr = result.stderr
 
         stage.stdoutFile?.let { target ->
             val resolved = try {
@@ -182,21 +211,22 @@ class ShellEngine(
             }
             resolved.parentFile?.mkdirs()
             if (stage.stdoutAppend) resolved.appendText(result.stdout) else resolved.writeText(result.stdout)
-            handled = true
+            // The text now lives in the file, so it must not also be printed.
+            stdout = ""
         }
 
         stage.stderrFile?.let { target ->
             val resolved = try {
                 ctx.resolveForWrite(target.path)
             } catch (e: IOException) {
-                return ShellRunOutput(result.stdout, "shell: ${e.message}\n", 1)
+                return ShellRunOutput(stdout, "shell: ${e.message}\n", 1)
             }
             resolved.parentFile?.mkdirs()
             if (stage.stderrAppend) resolved.appendText(result.stderr) else resolved.writeText(result.stderr)
-            handled = true
+            stderr = ""
         }
 
-        return if (handled) ShellRunOutput("", "", result.exitCode, result.cancelled) else null
+        return result.copy(stdout = stdout, stderr = stderr)
     }
 
     companion object {

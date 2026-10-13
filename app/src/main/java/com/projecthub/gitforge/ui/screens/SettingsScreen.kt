@@ -85,6 +85,7 @@ fun SettingsScreen(
     container: AppContainer,
     repositoriesViewModel: RepositoriesViewModel,
     onOpenUrl: (String) -> Unit,
+    onOpenDiagnostics: () -> Unit = {},
 ) {
     val settings by container.settingsRepository.settings.collectAsStateWithLifecycle(
         initialValue = container.settingsRepository.snapshot(),
@@ -522,8 +523,8 @@ fun SettingsScreen(
                     }
 
                     Spacer(Modifier.height(12.dp))
-                    TextButton(onClick = { showCleanupConfirm = false }) {
-                        Text("Troubleshooting: check the Terminal for command output, and Packages for runtime status.")
+                    TextButton(onClick = onOpenDiagnostics) {
+                        Text("Open Diagnostics — app log and crash reports")
                     }
                 }
             }
