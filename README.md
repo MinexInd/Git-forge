@@ -13,8 +13,30 @@ real processes.
 
 ---
 
+## Install the app (no Android Studio needed)
+
+You do not need Android Studio, a JDK or the Android SDK to run GitForge. Install the
+built APK:
+
+1. On the phone, open
+   [the latest release](https://github.com/ProjectHub-fie/Git-forge/releases/latest)
+   and download **`app-release.apk`**.
+2. Open the downloaded file. Android will ask you to allow installs from this source;
+   allow it. (This is the standard prompt for any app installed outside the Play
+   Store — GitForge does not need it enabled afterwards.)
+3. Tap **Install**, then launch **GitForge** from the app drawer.
+
+Requires Android 8.0 (API 26) or newer. The APK is signed and targets `arm64-v8a`
+(most phones), with `armeabi-v7a` and `x86_64` also offered.
+
+If you would rather build it yourself, see
+[Building the APK](#building-the-apk) below — that path does need the SDK.
+
+---
+
 ## Table of contents
 
+- [Install the app](#install-the-app-no-android-studio-needed)
 - [Status](#status)
 - [What works today](#what-works-today)
 - [Screenshots of the feature set](#feature-set)
