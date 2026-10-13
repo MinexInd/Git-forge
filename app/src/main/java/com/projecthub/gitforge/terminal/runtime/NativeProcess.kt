@@ -47,10 +47,10 @@ object NativeProcess {
         timeoutSeconds: Long = 0,
         onOutput: (String, TerminalLine.Stream) -> Unit = { _, _ -> },
     ): ProcessOutcome = withContext(Dispatchers.IO) {
-        val commandLine = (listOf(executable.absolutePath) + args).joinToString(" ")
-        AppLog.d("exec: ${Redaction.redact(commandLine)} (cwd=${workingDirectory.name})")
+        val command = ProcessInvocation.command(executable, args, android.os.Build.VERSION.SDK_INT)
+        AppLog.d("exec: ${Redaction.redact(command.joinToString(" "))} (cwd=${workingDirectory.name})")
 
-        val builder = ProcessBuilder(listOf(executable.absolutePath) + args)
+        val builder = ProcessBuilder(command)
             .directory(workingDirectory)
             .redirectErrorStream(false)
 

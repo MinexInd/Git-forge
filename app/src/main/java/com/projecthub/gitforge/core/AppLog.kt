@@ -11,16 +11,24 @@ object AppLog {
 
     private const val TAG = "GitForge"
 
-    fun d(message: String) = Log.d(TAG, Redaction.redact(message))
+    fun d(message: String) {
+        Log.d(TAG, Redaction.redact(message))
+        DiagnosticsLog.record("D", message)
+    }
 
-    fun i(message: String) = Log.i(TAG, Redaction.redact(message))
+    fun i(message: String) {
+        Log.i(TAG, Redaction.redact(message))
+        DiagnosticsLog.record("I", message)
+    }
 
     fun w(message: String, throwable: Throwable? = null) {
         Log.w(TAG, Redaction.redact(message), throwable?.let { RedactedThrowable(it) })
+        DiagnosticsLog.record("W", message + throwable?.let { " :: ${it::class.java.simpleName}: ${it.message}" }.orEmpty())
     }
 
     fun e(message: String, throwable: Throwable? = null) {
         Log.e(TAG, Redaction.redact(message), throwable?.let { RedactedThrowable(it) })
+        DiagnosticsLog.record("E", message + throwable?.let { " :: ${it::class.java.simpleName}: ${it.message}" }.orEmpty())
     }
 
     /**

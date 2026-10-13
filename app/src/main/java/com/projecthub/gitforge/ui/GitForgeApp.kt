@@ -56,6 +56,7 @@ import com.projecthub.gitforge.data.prefs.AppSettings
 import com.projecthub.gitforge.di.AppContainer
 import com.projecthub.gitforge.ui.components.ScreenTopBar
 import com.projecthub.gitforge.ui.nav.Destination
+import com.projecthub.gitforge.ui.screens.DiagnosticsScreen
 import com.projecthub.gitforge.ui.screens.EditorScreen
 import com.projecthub.gitforge.ui.screens.GitScreen
 import com.projecthub.gitforge.ui.screens.HomeScreen
@@ -272,7 +273,12 @@ fun GitForgeApp(
                                 container = container,
                                 repositoriesViewModel = repositoriesViewModel,
                                 onOpenUrl = openUrl,
+                                onOpenDiagnostics = { navigate(Destination.DIAGNOSTICS.route) },
                             )
+                        }
+
+                        composable(Destination.DIAGNOSTICS.route) {
+                            DiagnosticsScreen(container = container)
                         }
                     }
                 }
