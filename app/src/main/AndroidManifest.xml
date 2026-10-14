@@ -19,6 +19,14 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!--
+      Lets the in-app updater hand a verified APK to the Android package installer.
+      Without this declaration canRequestPackageInstalls() is always false and the
+      "install unknown apps" screen cannot be opened, so updates would be impossible.
+      Android still shows its own install confirmation; this grants no silent install.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!--
       The app deliberately requests no broad storage permission. All repositories live in
       app-private storage and user file import/export goes through the Storage Access
       Framework, which needs no manifest permission.
@@ -67,6 +75,20 @@
             android:authorities="${applicationId}.androidx-startup"
             android:exported="false"
             tools:node="remove" />
+
+        <!--
+          Exposes only the updater's staged APK to the system package installer. The
+          grant is per-URI and read-only; repositories and credentials are not shared.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.updates"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/update_file_paths" />
+        </provider>
     </application>
 
 </manifest>

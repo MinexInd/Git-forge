@@ -15,11 +15,25 @@ android {
         applicationId = "com.projecthub.gitforge"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+
+        // Where the in-app updater looks for new versions. A build variant can point
+        // at a different repository with -PGITFORGE_UPDATE_REPO_OWNER=... so a fork's
+        // APK updates from the fork's own releases rather than upstream's.
+        buildConfigField(
+            "String",
+            "UPDATE_REPO_OWNER",
+            "\"${findProperty("GITFORGE_UPDATE_REPO_OWNER") ?: "ProjectHub-fie"}\"",
+        )
+        buildConfigField(
+            "String",
+            "UPDATE_REPO_NAME",
+            "\"${findProperty("GITFORGE_UPDATE_REPO_NAME") ?: "Git-forge"}\"",
+        )
 
         // Method A (the GitHub device flow) needs a public OAuth App client ID. A
         // client ID is not a secret: the device flow exists precisely so that no

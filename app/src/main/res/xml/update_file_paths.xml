@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Only the updater's staging directory is exposed, and only to the package
+  installer. The repositories and credentials live under files/, which is not
+  listed here, so no other app can request them.
+-->
+<paths>
+    <cache-path name="updates" path="updates/" />
+</paths>

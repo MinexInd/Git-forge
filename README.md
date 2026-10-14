@@ -29,9 +29,13 @@ built APK:
 Requires Android 8.0 (API 26) or newer. The APK is signed and targets `arm64-v8a`
 (most phones), with `armeabi-v7a` and `x86_64` also offered.
 
-> **Version 1.0.1 fixes the terminal.** If commands produced no output, or a
+> **Version 1.0.1 fixed the terminal.** If commands produced no output, or a
 > userspace command reported "cannot execute", install 1.0.1 or later. See
 > [Fixed in 1.0.1](#fixed-in-101).
+>
+> **Version 1.1.0 adds in-app updates.** Once 1.1.0 or later is installed, GitForge
+> checks GitHub for a newer build on launch and can download and install it without a
+> computer. See [Updating GitForge](#updating-gitforge).
 
 If you would rather build it yourself, see
 [Building the APK](#building-the-apk) below — that path does need the SDK.
@@ -55,6 +59,7 @@ If you would rather build it yourself, see
 - [Running Python 3 and Node.js](#running-python-3-and-nodejs)
 - [Installing packages](#installing-packages)
 - [Building a signed release](#building-a-signed-release)
+- [Updating GitForge](#updating-gitforge)
 - [Security model](#security-model)
 - [Dependency and licence inventory](#dependency-and-licence-inventory)
 - [Known limitations](#known-limitations)
@@ -69,10 +74,12 @@ If you would rather build it yourself, see
 | Item | State |
 | --- | --- |
 | Debug APK builds | Yes — `app/build/outputs/apk/debug/app-debug.apk` |
-| Unit test suite | 111 tests, all passing |
+| Release APK and AAB build | Yes — `app-release.apk` and `app-release.aab`, signed and verified with `apksigner` |
+| Unit test suite | 154 tests, all passing |
 | Installed on a physical device | Not verified (no device or emulator was available in the build environment) |
 | GitHub end-to-end (clone, push) | Not verified (requires a real account and network access) |
 | Terminal with Node/npm/Python | Implemented; the runtime downloads on first use and needs a device to verify |
+| In-app update check and install | Implemented and unit-tested; the install prompt needs a device to verify |
 
 Nothing in the table above is guessed. Anything that was not actually executed is
 called out again in [Unverified work](#unverified-work).
@@ -139,6 +146,9 @@ called out again in [Unverified work](#unverified-work).
 - Settings for theme, editor, terminal, security and storage.
 - Onboarding.
 - Offline access to local files, local Git operations and installed tools.
+- In-app updates: checks this repository's releases on launch, verifies the download,
+  and installs through the Android package installer. See
+  [Updating GitForge](#updating-gitforge).
 
 ---
 
@@ -607,6 +617,82 @@ app\build\outputs\bundle\release\app-release.aab
 
 ---
 
+## Updating GitForge
+
+GitForge updates itself from this repository's releases. There is no server to run and
+no account to sign in to for updates.
+
+### How it works
+
+1. On launch, the app makes one silent check against
+   `https://api.github.com/repos/ProjectHub-fie/Git-forge/releases`.
+2. If a newer build exists on the app's channel, a snackbar appears with an **Update**
+   action. It is silent otherwise, so an offline or up-to-date device is never
+   interrupted.
+3. Open **Update** from the drawer, or **Settings → About → Check for updates**.
+4. Tap **Download update**. The APK is downloaded to app-private storage and verified.
+5. Tap **Install**. Android shows its normal install confirmation; the app cannot and
+   does not install anything silently.
+
+### Channels
+
+The channel follows the build type, so the two never cross-install:
+
+| Installed build | Channel | Downloads |
+| --- | --- | --- |
+| `app-release.apk` (signed) | Release | `app-release.apk` |
+| `app-debug.apk` | Debug | `app-debug.apk` |
+
+A release build will not install a debug APK and vice versa. The two are signed with
+different keys, so an install across the boundary would fail; the app checks the
+signing certificate before it offers the install and explains the mismatch instead.
+
+### What is verified before installing
+
+- **Checksum** — if the release advertises a SHA-256 digest for the asset, the bytes
+  on disk must match, or the download is discarded.
+- **Size** — a truncated download is rejected even when no digest is published.
+- **Signing certificate** — the downloaded APK must be signed by the same key as the
+  installed app. Android enforces this anyway; checking first turns a bare
+  "App not installed" into a readable reason.
+
+Nothing is uploaded and no credential is used: the releases endpoint is public, so the
+check works whether or not you are signed in to GitHub.
+
+### Installing over an existing copy
+
+Android replaces an installed app in place when the new APK has a higher
+`versionCode` and the same signing certificate. Your repositories, settings and
+credentials are untouched by an update because they live in app-private storage that
+the installer does not clear.
+
+If you installed a build signed with a *different* key — for example an earlier
+hand-built debug APK, or a release built with your own keystore — Android will refuse
+the update and you must uninstall the old copy first. **Uninstalling removes the
+app's private storage, including cloned repositories.** Export anything you need
+first. To avoid this, install 1.1.0 or later and stay on the same channel.
+
+### Granting install permission
+
+Android 8.0 and later require per-app permission to install packages. The first time
+you tap **Install**, GitForge opens the right settings screen
+(*Install unknown apps → GitForge*). Grant it and return; the app re-checks the
+permission when the screen resumes. The permission is only needed for the update
+itself.
+
+### Building your own update channel
+
+A fork can point the updater at its own releases instead of upstream's:
+
+```
+gradlew.bat assembleDebug -PGITFORGE_UPDATE_REPO_OWNER=your-user -PGITFORGE_UPDATE_REPO_NAME=your-repo
+```
+
+The default owner and repository are compiled in from
+`UPDATE_REPO_OWNER` / `UPDATE_REPO_NAME` in `app/build.gradle.kts`.
+
+---
+
 ## Security model
 
 | Concern | How GitForge handles it |
@@ -780,6 +866,12 @@ This section exists so nothing is overstated.
    instrumented tests.
 6. **`arm64-v8a` on real hardware** is the intended target and the only ABI for which
    the userspace is published, but it has not been confirmed on a physical phone.
+7. **The in-app updater has not performed a real install.** The release lookup, the
+   version ordering, the channel selection and the download verification are covered
+   by unit tests that run the real `ReleaseClient` against a real HTTP server, but no
+   APK has been downloaded to a device and installed through the system installer.
+   The signature-continuity check in particular needs a device to confirm it behaves
+   as intended for a matching and a mismatching key.
 
 ### Fixed in 1.0.1
 
@@ -812,6 +904,29 @@ A third, larger issue was identified in the same review:
 To make any remaining failure diagnosable without adb, the app now keeps its own
 redacted log and crash record and exposes them on the **Diagnostics** screen.
 
+### New in 1.1.0
+
+In-app updates. GitForge now checks this repository's releases on launch, and can
+download, verify and install a newer build without a computer. The updater:
+
+- follows the build type's channel, so a release build never installs a debug APK;
+- verifies the download's size, and its SHA-256 when the release advertises one;
+- checks the downloaded APK's signing certificate against the installed app's before
+  offering the install, so a cross-key install is explained rather than silently
+  failing;
+- stages the APK in app-private storage and hands it to the Android package
+  installer, which still shows its own confirmation.
+
+See [Updating GitForge](#updating-gitforge). New tests cover version ordering
+(including the `1.10.0` vs `1.9.0` case), release parsing, channel and asset
+selection, rate-limit and 404 handling, and the rule that no token appears in a URL.
+
+One design defect was caught by these tests before release: the first version of the
+asset selector fell back to *any* APK, so a release shipping only a debug APK would
+have been offered to a release build. That build is signed with a different key and
+could never install. The selector now refuses to cross the release/debug boundary,
+and a regression test pins that behaviour.
+
 ---
 
 ## Project layout
@@ -826,7 +941,9 @@ GitForge/
 │       ├── main/
 │       │   ├── AndroidManifest.xml
 │       │   ├── java/com/projecthub/gitforge/   (see Architecture)
-│       │   └── res/                            Icons, theme, strings
+│       │   │   └── update/                      In-app updater (release lookup,
+│       │   │                                     download, verify, install)
+│       │   └── res/                            Icons, theme, strings, FileProvider
 │       └── test/java/com/projecthub/gitforge/  JVM unit tests
 ├── gradle/wrapper/                 Gradle 8.9 wrapper
 ├── build.gradle.kts                Plugin versions

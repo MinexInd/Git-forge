@@ -46,6 +46,8 @@ class GitForgeApplication : Application() {
                 File(container.runtimeManager.cacheDir, "").listFiles()?.forEach { stale ->
                     if (stale.isFile && stale.name.endsWith(".deb")) stale.delete()
                 }
+                // A staged update APK is only needed until the installer copies it.
+                container.updateManager.clearStaged()
             }.onFailure { AppLog.w("Startup cleanup failed", it) }
 
             // Warm the settings cache so the first frame uses the saved theme, and
