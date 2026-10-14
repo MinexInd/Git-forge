@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -81,6 +82,13 @@ enum class Destination(
         icon = Icons.Default.BugReport,
         isPrimary = false,
         description = "App log and crash reports",
+    ),
+    UPDATE(
+        route = "update",
+        label = "Update",
+        icon = Icons.Default.SystemUpdate,
+        isPrimary = false,
+        description = "Check for and install a newer build",
     );
 
     companion object {

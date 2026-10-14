@@ -22,6 +22,9 @@ import com.projecthub.gitforge.terminal.runtime.RuntimeManager
 import com.projecthub.gitforge.terminal.runtime.RuntimeProbe
 import com.projecthub.gitforge.terminal.runtime.ShellInterpreterCommand
 import com.projecthub.gitforge.terminal.shell.ExternalCommand
+import com.projecthub.gitforge.update.ReleaseClient
+import com.projecthub.gitforge.update.UpdateChannel
+import com.projecthub.gitforge.update.UpdateManager
 import com.projecthub.gitforge.workspace.FileOperations
 import com.projecthub.gitforge.workspace.FileTreeReader
 import com.projecthub.gitforge.workspace.WorkspaceManager
@@ -156,6 +159,25 @@ class AppContainer(private val context: Context) {
                     .onFailure { AppLog.w("Could not save the commit identity", it) }
             }
         }
+
+    // ------------------------------------------------------------------- update
+
+    /**
+     * Checks GitHub for a newer build and installs it.
+     *
+     * The channel follows the build type: a debug build looks for the debug APK and a
+     * release build for the signed release APK, so the two never cross-install. The
+     * token is optional — the releases endpoint is public — and is read per call, so
+     * the update path works whether or not the user is signed in.
+     */
+    val updateManager: UpdateManager by lazy { UpdateManager(context) }
+
+    val releaseClient: ReleaseClient by lazy {
+        ReleaseClient(owner = BuildConfig.UPDATE_REPO_OWNER, repo = BuildConfig.UPDATE_REPO_NAME)
+    }
+
+    val updateChannel: UpdateChannel
+        get() = UpdateChannel.forBuild(BuildConfig.DEBUG)
 
     val workspaceRoot: File get() = workspaceManager.root
 }

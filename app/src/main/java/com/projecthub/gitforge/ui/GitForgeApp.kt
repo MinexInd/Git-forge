@@ -29,8 +29,10 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
@@ -64,6 +66,8 @@ import com.projecthub.gitforge.ui.screens.PackagesScreen
 import com.projecthub.gitforge.ui.screens.RepositoriesScreen
 import com.projecthub.gitforge.ui.screens.SettingsScreen
 import com.projecthub.gitforge.ui.screens.TerminalScreen
+import com.projecthub.gitforge.ui.screens.UpdateScreen
+import com.projecthub.gitforge.update.UpdateCheck
 import kotlinx.coroutines.launch
 
 /**
@@ -94,6 +98,8 @@ fun GitForgeApp(
     val editorViewModel: EditorViewModel = viewModel { EditorViewModel(container) }
     val gitViewModel: GitViewModel = viewModel { GitViewModel(container) }
     val packagesViewModel: PackagesViewModel = viewModel { PackagesViewModel(container) }
+    val updateViewModel: com.projecthub.gitforge.ui.viewmodel.UpdateViewModel =
+        viewModel { com.projecthub.gitforge.ui.viewmodel.UpdateViewModel(container) }
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -127,6 +133,22 @@ fun GitForgeApp(
                 restoreState = true
             }
         }
+    }
+
+    // One silent check per app launch. The result is only surfaced when an update
+    // exists, so a device that is offline or up to date is never interrupted.
+    LaunchedEffect(Unit) {
+        updateViewModel.checkForUpdate()
+    }
+    val updateState by updateViewModel.state.collectAsStateWithLifecycle()
+    LaunchedEffect((updateState.check as? UpdateCheck.Available)?.release?.tagName) {
+        val available = updateState.check as? UpdateCheck.Available ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(
+            message = "GitForge ${available.release.version} is available",
+            actionLabel = "Update",
+            duration = SnackbarDuration.Long,
+        )
+        if (result == SnackbarResult.ActionPerformed) navigate(Destination.UPDATE.route)
     }
 
     ModalNavigationDrawer(
@@ -274,11 +296,20 @@ fun GitForgeApp(
                                 repositoriesViewModel = repositoriesViewModel,
                                 onOpenUrl = openUrl,
                                 onOpenDiagnostics = { navigate(Destination.DIAGNOSTICS.route) },
+                                onOpenUpdate = { navigate(Destination.UPDATE.route) },
+                                installedVersion = updateViewModel.state.value.currentVersion,
                             )
                         }
 
                         composable(Destination.DIAGNOSTICS.route) {
                             DiagnosticsScreen(container = container)
+                        }
+
+                        composable(Destination.UPDATE.route) {
+                            UpdateScreen(
+                                viewModel = updateViewModel,
+                                onOpenReleasePage = openUrl,
+                            )
                         }
                     }
                 }

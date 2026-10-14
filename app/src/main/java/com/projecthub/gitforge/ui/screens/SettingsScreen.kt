@@ -86,6 +86,8 @@ fun SettingsScreen(
     repositoriesViewModel: RepositoriesViewModel,
     onOpenUrl: (String) -> Unit,
     onOpenDiagnostics: () -> Unit = {},
+    onOpenUpdate: () -> Unit = {},
+    installedVersion: String = com.projecthub.gitforge.BuildConfig.VERSION_NAME,
 ) {
     val settings by container.settingsRepository.settings.collectAsStateWithLifecycle(
         initialValue = container.settingsRepository.snapshot(),
@@ -493,7 +495,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(8.dp))
-                    InlineLabel("Version", com.projecthub.gitforge.BuildConfig.VERSION_NAME)
+                    InlineLabel("Version", installedVersion)
                     InlineLabel("Build", "${com.projecthub.gitforge.BuildConfig.VERSION_CODE} (${com.projecthub.gitforge.BuildConfig.BUILD_TYPE})")
                     InlineLabel("Application ID", com.projecthub.gitforge.BuildConfig.APPLICATION_ID)
                     InlineLabel("Min SDK", "26 (Android 8.0)")
@@ -523,6 +525,9 @@ fun SettingsScreen(
                     }
 
                     Spacer(Modifier.height(12.dp))
+                    TextButton(onClick = onOpenUpdate) {
+                        Text("Check for updates — install a newer build")
+                    }
                     TextButton(onClick = onOpenDiagnostics) {
                         Text("Open Diagnostics — app log and crash reports")
                     }
