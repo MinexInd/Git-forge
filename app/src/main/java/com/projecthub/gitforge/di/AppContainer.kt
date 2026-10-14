@@ -91,21 +91,16 @@ class AppContainer(private val context: Context) {
 
     /**
      * The OAuth client ID is public information and safe in the APK: the device flow
-     * exists precisely so that no client *secret* is needed. The app ships with a
-     * default (see BuildConfig.DEFAULT_OAUTH_CLIENT_ID); an override entered in
-     * Settings wins, and is persisted so it survives a restart instead of having to
-     * be re-entered on every launch.
+     * exists precisely so that no client *secret* is needed.
+     *
+     * It is a build-time constant with no runtime override. The browser web flow would
+     * need a client secret, which cannot be shipped in an APK, so the device flow is
+     * the only secret-free option and there is nothing useful for a user to configure
+     * here. Forks set their own value with
+     * `-PGITFORGE_OAUTH_CLIENT_ID=...` or by editing the default in build.gradle.kts.
      */
-    var oauthClientId: String?
-        get() = settingsRepository.snapshot().oauthClientId
-            .ifBlank { BuildConfig.DEFAULT_OAUTH_CLIENT_ID }
-            .ifBlank { null }
-        set(value) {
-            applicationScope.launch {
-                runCatching { settingsRepository.setOAuthClientId(value.orEmpty()) }
-                    .onFailure { AppLog.w("Could not save the OAuth client ID", it) }
-            }
-        }
+    val oauthClientId: String? =
+        BuildConfig.DEFAULT_OAUTH_CLIENT_ID.ifBlank { null }
 
     // ----------------------------------------------------------------- terminal
 
