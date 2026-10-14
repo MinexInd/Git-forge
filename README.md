@@ -1055,76 +1055,53 @@ GitForge/
 
 ## Continuous integration
 
-**GitForge does not currently run CI.** There is no workflow file in the repository.
-One was written and reviewed, but pushing anything under `.github/workflows/` requires
-a token with the `workflow` scope, and the credentials available during development
-had only `repo`. GitHub rejected the push, so the file was left out rather than the
-documentation claiming a pipeline that does not exist.
+`.github/workflows/build-apk.yml` builds GitForge on every push to `main`, on manual
+dispatch, and when a release is published. It runs
+`./gradlew assembleDebug assembleRelease`, uploads both APKs as workflow artifacts, and
+attaches them to the release when the trigger is a release. It contains no secrets and no
+signing material.
 
-To enable it, a maintainer with `workflow` scope can save the following as
-`.github/workflows/android.yml`, or add it through the GitHub web UI. It contains no
-secrets and no signing material, and it uses the same toolchain the build was verified
-against locally — JDK 17, Android SDK API 34, build-tools 34.0.0.
+The release APK it produces is **unsigned**. The workflow sets no keystore, and
+`app/build.gradle.kts` only attaches the release signing config when
+`GITFORGE_KEYSTORE_PATH` is present, so the output is
+`app/build/outputs/apk/release/app-release-unsigned.apk`. An unsigned APK will not
+install: sign it before distributing, or point the build at the project keystore through
+the environment variables in [Building a signed release](#building-a-signed-release).
+The debug key differs from the release key, so the debug APK from the same run can never
+be installed over a release build.
 
-```yaml
-name: Android CI
+### Adding or changing a workflow file
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
+Pushing anything under `.github/workflows/` needs a credential with the **`workflow`**
+scope. The personal access token used during development carried only `repo` and
+`write:packages`, so GitHub refused the push with:
 
-permissions:
-  contents: read
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install SDK packages
-        run: sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Unit tests
-        run: ./gradlew testDebugUnitTest --no-daemon
-
-      - name: Assemble debug APK
-        run: ./gradlew assembleDebug --no-daemon
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: gitforge-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: app/build/test-results/testDebugUnitTest/*.xml
-          if-no-files-found: ignore
+```text
+refusing to allow a Personal Access Token to create or update workflow
+`.github/workflows/build-apk.yml` without `workflow` scope
 ```
 
-Until that file is added, run the same commands locally; the results are in
-[Build and test results](#build-and-test-results). No signing key or secret is used or
-required, by CI or by the build.
+and the equivalent API call, `PUT .../contents/.github/workflows/build-apk.yml`, returns
+`404 Not Found`. To add or edit the workflow, use one of:
+
+- a classic token with the `workflow` scope;
+- a fine-grained token with **Workflows: write** permission;
+- the GitHub web UI, which needs no token;
+- `gh workflow` or `gh api` with a token that has the scope.
+
+### Running the same checks locally
+
+CI mirrors the local toolchain: JDK 17, Android SDK API 34, build-tools 34.0.0. To get
+the same results without waiting on a runner:
+
+```console
+gradlew.bat testDebugUnitTest
+gradlew.bat assembleDebug
+```
+
+The recorded results are in [Build and test results](#build-and-test-results). No signing
+key or secret is used or required by the build.
+
 
 ---
 
