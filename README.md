@@ -37,11 +37,17 @@ Requires Android 8.0 (API 26) or newer. The APK is signed and targets `arm64-v8a
 > checks GitHub for a newer build on launch and can download and install it without a
 > computer. See [Updating GitForge](#updating-gitforge).
 >
+> **Version 1.1.1 moves GitHub sign-in to the browser.** The floating window and its
+> "display over other apps" permission are gone: sign-in now opens the GitHub
+> verification page in your browser with the code on the clipboard. No special Android
+> permission is requested for sign-in. See
+> [Option B — OAuth device flow](#option-b--oauth-device-flow-no-token-copying).
+>
 > ⚠️ **Upgrading from V1.0.0 needs a one-time uninstall.** V1.0.0 was signed with a
-> keystore that is no longer available, so Android will refuse to install V1.1.0 over
-> it. Uninstall V1.0.0 first — **which deletes the app's private storage, including
-> cloned repositories**, so export or push anything you need first. Every update after
-> 1.1.0 works in place. Details under
+> keystore that is no longer available, so Android will refuse to install V1.1.0 or
+> later over it. Uninstall V1.0.0 first — **which deletes the app's private storage,
+> including cloned repositories**, so export or push anything you need first. Every
+> update after 1.1.0 works in place. Details under
 > [Installing over an existing copy](#installing-over-an-existing-copy).
 
 If you would rather build it yourself, see
@@ -82,7 +88,7 @@ If you would rather build it yourself, see
 | --- | --- |
 | Debug APK builds | Yes — `app/build/outputs/apk/debug/app-debug.apk` |
 | Release APK and AAB build | Yes — `app-release.apk` and `app-release.aab`, signed and verified with `apksigner` |
-| Unit test suite | 154 tests, all passing |
+| Unit test suite | 151 tests, all passing |
 | Installed on a physical device | Not verified (no device or emulator was available in the build environment) |
 | GitHub end-to-end (clone, push) | Not verified (requires a real account and network access) |
 | Terminal with Node/npm/Python | Implemented; the runtime downloads on first use and needs a device to verify |
@@ -97,8 +103,9 @@ called out again in [Unverified work](#unverified-work).
 
 ### GitHub
 
-- Sign in with the OAuth **device flow** (RFC 8628), so no client secret is ever
-  embedded in the APK, or paste a personal access token.
+- Sign in with the OAuth **device flow** (RFC 8628), which opens the GitHub
+  verification page in your browser and needs no Android permission and no client
+  secret embedded in the APK, or paste a personal access token.
 - Browse public and private repositories you are authorised to see, with search,
   filtering and pagination.
 - Browse branches, contents and commit history through the REST API.
@@ -313,10 +320,18 @@ app/build/outputs/bundle/release/app-release.aab  15.2 MB
 ```
 
 Both APKs were inspected with `aapt2` and report package `com.projecthub.gitforge`,
-version code `3`, version name `1.1.0`, label `GitForge`, `minSdk 26`, `targetSdk 34`,
+version code `4`, version name `1.1.1`, label `GitForge`, `minSdk 26`, `targetSdk 34`,
 launcher activity `com.projecthub.gitforge.MainActivity`, and native ABIs
 `arm64-v8a`, `armeabi-v7a`, `x86_64`. The release APK was verified with `apksigner` as
-signed by `CN=GitForge, OU=Release, O=ProjectHub`.
+signed by `CN=GitForge, OU=Release, O=ProjectHub`, certificate SHA-256
+`5b289f0c27fb56e0fb752eb60ec7f1738bee13ef75ae3e9b5697a01882fb4e8f` — the same key as
+V1.1.0, so 1.1.1 installs over 1.1.0 in place.
+
+The release APK declares only `INTERNET`, `ACCESS_NETWORK_STATE` and
+`REQUEST_INSTALL_PACKAGES` in its own manifest; `WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED`
+and `FOREGROUND_SERVICE` are merged in by `androidx.work` (WorkManager), and there is
+no `SYSTEM_ALERT_WINDOW` or `POST_NOTIFICATIONS`. `aapt2 dump permissions` confirms
+this on the built file.
 
 The debug and release APKs are signed with **different** certificates, which is
 expected: the debug build uses the Android debug key. An installed release build will
@@ -403,7 +418,7 @@ repository.
    - **Contents**: Read and write (needed to push).
    - **Metadata**: Read.
 3. Copy the token.
-4. In GitForge, open **Settings → GitHub account → Sign in with a token**, paste it
+4. In GitForge, open **Settings → GitHub and security → Sign in with a token**, paste it
    and confirm.
 
 GitForge verifies the token against `GET /user` before storing it. A token GitHub
@@ -413,32 +428,37 @@ not.
 ### Option B — OAuth device flow (no token copying)
 
 This is the default. GitForge ships with a public client ID already compiled in
-(`BuildConfig.DEFAULT_OAUTH_CLIENT_ID`), so there is normally nothing to configure:
+(`BuildConfig.DEFAULT_OAUTH_CLIENT_ID`), so there is nothing to configure:
 
 1. Open **Settings → GitHub and security**.
-2. Choose **Connect with GitHub**. GitForge asks for permission to display over other
-   apps, then opens a floating window showing a short code such as `35BD-DA5A`.
-3. Choose **Open browser**, enter the code, and approve access on GitHub. The window
-   stays visible the whole time, so the code does not disappear while you are in the
-   browser.
+2. Choose **Connect with GitHub**. GitForge asks GitHub for a short code such as
+   `35BD-DA5A` and **opens the verification page in your browser**, with the code
+   already on the clipboard.
+3. Paste the code, approve access on GitHub, and return to GitForge. The dialog stays
+   on screen while GitForge polls GitHub, so progress and any error remain visible.
 4. GitForge verifies the token with `GET /user` and stores it in the Keystore-backed
    credential store.
 
-To use your own OAuth app instead, register one at **GitHub → Settings → Developer
-settings → OAuth Apps → New OAuth App**, enable **Device flow**, then paste its
-**Client ID** into **Settings → GitHub and security → Change OAuth client ID**. The
-override is persisted, so it only has to be entered once.
-
 There is no callback URL in this flow, and GitHub never redirects back to the app.
 The device flow does not use one, which is why no client secret is needed and why
-nothing secret is embedded in the APK. If GitHub's OAuth app form insists on a value
-for *Authorization callback URL*, any valid URL works — it is stored but never
-contacted.
+nothing secret is embedded in the APK.
 
-The floating window is optional. Declining the over-other-apps permission leaves the
-flow fully working through the in-app dialog; only the ability to see the code while
-the browser is in the foreground is lost. If the app is closed mid-sign-in, reopen it
-and connect again — a code that has not been approved cannot be replayed.
+If the browser does not open, choose **Open browser** in the dialog, or copy the code
+and go to `https://github.com/login/device` yourself. If the app is closed mid-sign-in,
+reopen it and connect again — a code that has not been approved cannot be replayed.
+
+**No special Android permission is needed.** Earlier builds drew the code in a floating
+window, which required the "display over other apps" permission; Play restricts that
+permission for untrusted apps and users reasonably refuse it, so sign-in now uses a
+real browser tab instead. GitForge requests no permission beyond network access and the
+optional "install unknown apps" used by the updater.
+
+To use your own OAuth app, register one at **GitHub → Settings → Developer settings →
+OAuth Apps → New OAuth App**, enable **Device flow**, and build with
+`-PGITFORGE_OAUTH_CLIENT_ID=...` or edit the default in `app/build.gradle.kts`. There is
+no in-app field for it: the client ID is public information but it is a build-time
+constant, and changing it at runtime would not change which OAuth app GitHub has
+registered.
 
 > A client **secret** is never requested and never stored. The device flow is
 > designed so that a public client can obtain a token without one.
@@ -701,7 +721,7 @@ will refuse to install it over V1.0.0. This is a one-time step:
 1. Export or push anything you need from the repositories in GitForge.
 2. Uninstall V1.0.0. **This deletes the app's private storage, including cloned
    repositories.**
-3. Install V1.1.0.
+3. Install V1.1.0 or later (V1.1.1 is current).
 
 From V1.1.0 onward the certificate is stable, so every later update installs in place
 and this does not recur. If you still hold the original V1.0.0 keystore, a maintainer
@@ -738,9 +758,9 @@ The default owner and repository are compiled in from
 | --- | --- |
 | Token storage | `EncryptedSharedPreferences` backed by the Android Keystore |
 | Client secret | Never requested and never embedded; the device flow is used instead |
-| OAuth client ID | Public by design, compiled in as `BuildConfig.DEFAULT_OAUTH_CLIENT_ID` and overridable in Settings |
-| Overlay permission | Used only to show the sign-in code over the browser. The window never displays the token, and the flow works without the permission |
-| Sign-in code | Public, short-lived and single-use; shown in the window and long-pressable to copy |
+| OAuth client ID | Public by design, compiled in as `BuildConfig.DEFAULT_OAUTH_CLIENT_ID`; not user-configurable |
+| Android permissions | Only `INTERNET`, `ACCESS_NETWORK_STATE` and the optional `REQUEST_INSTALL_PACKAGES`. No overlay, notification or foreground-service permission |
+| Sign-in code | Public, short-lived and single-use; shown in the dialog and copied to the clipboard for the browser |
 | Remote URLs | Stored without userinfo; the credential is supplied in memory at push time |
 | Logs and errors | Every message passes through `Redaction`, which strips tokens from URLs, headers and free text |
 | Repository content | Treated as untrusted; scripts in a cloned repository are never executed automatically |
@@ -750,6 +770,16 @@ The default owner and repository are compiled in from
 | WebView | Not used for the app shell. If added for an editor engine it must run with JavaScript bridges disabled for untrusted content |
 | Destructive Git operations | Require explicit confirmation; force-push is never performed silently |
 | Credentials in history | `export` of a token is discouraged in the UI copy, and the token is never written into shell history by the app |
+
+### Why sign-in uses the device flow and not a browser redirect
+
+GitHub's browser (web) flow requires a `client_secret` at the token exchange step, and
+GitHub has no public-client concept for OAuth apps: its own documentation marks
+`client_secret` as required, and GitHub's staff have confirmed that native apps are
+expected to embed one. A secret shipped in an APK is not a secret, so GitForge does not
+use that flow. The device flow is the one flow GitHub documents as not needing a client
+secret, which is why the app opens the verification page in a browser and polls, rather
+than registering a redirect URI.
 
 GitForge also refuses, by design, to:
 
@@ -892,11 +922,10 @@ This section exists so nothing is overstated.
    with no token, exactly as RFC 8628 requires before the user approves. Everything
    after approval — token exchange, clone, push — is implemented and unit-tested but
    has not been run against GitHub.
-3. **The floating sign-in window has not been shown on a real device.** The service
-   compiles, is registered in the manifest as a non-exported `dataSync` foreground
-   service, and the over-other-apps permission is present, but `TYPE_APPLICATION_OVERLAY`
-   behaviour (position, drag, keyboard interaction) can only be confirmed on hardware.
-   The in-app dialog path is a working fallback if the permission is refused.
+3. **The browser hand-off has not been run on a device.** The device flow's first leg is
+   verified against the live service (item 2), and the code path that copies the user
+   code and fires an `ACTION_VIEW` intent is straightforward, but "the browser opened
+   and the code pasted correctly" can only be confirmed on hardware.
 4. **The runtime download was not exercised.** Package versions and checksums are
    recorded in `RuntimePackageRegistry` and covered by unit tests, but no `.deb` was
    actually downloaded or unpacked, because that needs a device and network.
@@ -951,6 +980,25 @@ A third, larger issue was identified in the same review:
 
 To make any remaining failure diagnosable without adb, the app now keeps its own
 redacted log and crash record and exposes them on the **Diagnostics** screen.
+
+### New in 1.1.1
+
+GitHub sign-in now uses the browser instead of a floating window. The "display over
+other apps" permission is gone from the manifest, along with the overlay service and
+the notification permission it needed:
+
+- the device flow asks GitHub for a code and opens the verification page with
+  `ACTION_VIEW`, putting the code on the clipboard first;
+- the in-app dialog stays visible while polling continues, so the waiting state and
+  any error are still shown;
+- the build-time client ID is no longer editable in Settings, because a runtime field
+  could not change which OAuth app GitHub has registered and invited users to paste a
+  value with no effect;
+- the app now requests no permission for sign-in at all.
+
+The release is signed with the same certificate as V1.1.0 (SHA-256
+`5b289f0c27fb56e0fb752eb60ec7f1738bee13ef75ae3e9b5697a01882fb4e8f`), so it installs
+over 1.1.0 in place.
 
 ### New in 1.1.0
 
