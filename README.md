@@ -36,6 +36,13 @@ Requires Android 8.0 (API 26) or newer. The APK is signed and targets `arm64-v8a
 > **Version 1.1.0 adds in-app updates.** Once 1.1.0 or later is installed, GitForge
 > checks GitHub for a newer build on launch and can download and install it without a
 > computer. See [Updating GitForge](#updating-gitforge).
+>
+> ⚠️ **Upgrading from V1.0.0 needs a one-time uninstall.** V1.0.0 was signed with a
+> keystore that is no longer available, so Android will refuse to install V1.1.0 over
+> it. Uninstall V1.0.0 first — **which deletes the app's private storage, including
+> cloned repositories**, so export or push anything you need first. Every update after
+> 1.1.0 works in place. Details under
+> [Installing over an existing copy](#installing-over-an-existing-copy).
 
 If you would rather build it yourself, see
 [Building the APK](#building-the-apk) below — that path does need the SDK.
@@ -228,7 +235,9 @@ JGit credentials provider.
 
 ### 1. Install a JDK
 
-GitForge builds with **JDK 17** or **JDK 21**. Either works; JDK 21 is used in CI.
+GitForge builds with **JDK 17** or **JDK 21**. Either works. The build was verified on
+JDK 17 (see [Build and test results](#build-and-test-results)); CI is not active, so
+there is no second toolchain in use to point at.
 
 - Download from [Adoptium Temurin](https://adoptium.net/temurin/releases/?version=21)
   or install Microsoft's OpenJDK.
@@ -294,14 +303,25 @@ app\build\outputs\apk\debug\app-debug.apk
 ```
 
 That path is produced by the standard Android Gradle Plugin layout; it is the file
-the build actually wrote. On this repository's build machine the verified output was:
+the build actually wrote. On the build machine used for this release the verified
+outputs were:
 
 ```
-/workspace/project/app/build/outputs/apk/debug/app-debug.apk
+app/build/outputs/apk/debug/app-debug.apk      22.7 MB
+app/build/outputs/apk/release/app-release.apk  15.5 MB
+app/build/outputs/bundle/release/app-release.aab  15.2 MB
 ```
 
-with size ≈ 22.7 MB, package `com.projecthub.gitforge`, version name `1.0.0`,
-`minSdk 26`, `targetSdk 34`, launcher activity `com.projecthub.gitforge.MainActivity`.
+Both APKs were inspected with `aapt2` and report package `com.projecthub.gitforge`,
+version code `3`, version name `1.1.0`, label `GitForge`, `minSdk 26`, `targetSdk 34`,
+launcher activity `com.projecthub.gitforge.MainActivity`, and native ABIs
+`arm64-v8a`, `armeabi-v7a`, `x86_64`. The release APK was verified with `apksigner` as
+signed by `CN=GitForge, OU=Release, O=ProjectHub`.
+
+The debug and release APKs are signed with **different** certificates, which is
+expected: the debug build uses the Android debug key. An installed release build will
+not accept a debug APK as an update, and the in-app updater refuses the swap rather
+than letting the installer fail.
 
 ### Installing on a device
 
@@ -572,6 +592,14 @@ keytool -genkeypair -v `
 Keep this file and its passwords somewhere safe and backed up. Losing it means you
 can no longer update an app already published under it.
 
+> **This is not hypothetical.** The V1.0.0 release's keystore was lost, so V1.1.0 had
+> to be signed with a new key and V1.0.0 users must uninstall before upgrading — losing
+> their app-private storage with it. Back the keystore up somewhere durable before
+> publishing anything, and record which key signed each release.
+>
+> If you are publishing updates to an app you built earlier, re-use **that** keystore.
+> Generating a new one silently breaks every existing install.
+
 ### 2. Build with the secrets in the environment
 
 PowerShell:
@@ -666,11 +694,22 @@ Android replaces an installed app in place when the new APK has a higher
 credentials are untouched by an update because they live in app-private storage that
 the installer does not clear.
 
-If you installed a build signed with a *different* key — for example an earlier
+**The V1.0.0 → V1.1.0 step is the exception.** The V1.0.0 release was signed with a
+keystore that is no longer available, so V1.1.0 is signed with a new key and Android
+will refuse to install it over V1.0.0. This is a one-time step:
+
+1. Export or push anything you need from the repositories in GitForge.
+2. Uninstall V1.0.0. **This deletes the app's private storage, including cloned
+   repositories.**
+3. Install V1.1.0.
+
+From V1.1.0 onward the certificate is stable, so every later update installs in place
+and this does not recur. If you still hold the original V1.0.0 keystore, a maintainer
+can re-sign V1.1.0 with it and the one-time uninstall is not needed.
+
+More generally, if you installed a build signed with a *different* key — an earlier
 hand-built debug APK, or a release built with your own keystore — Android will refuse
-the update and you must uninstall the old copy first. **Uninstalling removes the
-app's private storage, including cloned repositories.** Export anything you need
-first. To avoid this, install 1.1.0 or later and stay on the same channel.
+the update and you must uninstall the old copy first, with the same storage caveat.
 
 ### Granting install permission
 
@@ -872,6 +911,15 @@ This section exists so nothing is overstated.
    APK has been downloaded to a device and installed through the system installer.
    The signature-continuity check in particular needs a device to confirm it behaves
    as intended for a matching and a mismatching key.
+8. **CI is not active.** No workflow file is in the repository, so nothing has run on
+   GitHub Actions. The workflow is written out in
+   [Continuous integration](#continuous-integration) for a maintainer to add; it could
+   not be pushed because the available tokens lacked the `workflow` scope. Every build
+   and test result in this document comes from a local run, not from CI.
+9. **The published V1.1.0 cannot be installed over V1.0.0.** The V1.0.0 keystore was
+   lost, so V1.1.0 is signed with a new key and Android rejects the upgrade. This is
+   documented rather than fixed: it cannot be fixed without the original key. From
+   V1.1.0 onward the certificate is stable.
 
 ### Fixed in 1.0.1
 
@@ -933,7 +981,8 @@ and a regression test pins that behaviour.
 
 ```
 GitForge/
-├── .github/workflows/android.yml   CI: build, test, upload APK
+├── .github/                        absent: the CI workflow is documented but not
+│                                    yet pushed, see "Continuous integration"
 ├── app/
 │   ├── build.gradle.kts            Module config, dependencies, signing
 │   ├── proguard-rules.pro          Keep rules for JGit and serialization
@@ -958,14 +1007,76 @@ GitForge/
 
 ## Continuous integration
 
-`.github/workflows/android.yml` runs on every push and pull request:
+**GitForge does not currently run CI.** There is no workflow file in the repository.
+One was written and reviewed, but pushing anything under `.github/workflows/` requires
+a token with the `workflow` scope, and the credentials available during development
+had only `repo`. GitHub rejected the push, so the file was left out rather than the
+documentation claiming a pipeline that does not exist.
 
-- sets up JDK 17 and the Android SDK (API 34);
-- runs `./gradlew testDebugUnitTest`;
-- runs `./gradlew assembleDebug`;
-- uploads `app-debug.apk` as a workflow artifact.
+To enable it, a maintainer with `workflow` scope can save the following as
+`.github/workflows/android.yml`, or add it through the GitHub web UI. It contains no
+secrets and no signing material, and it uses the same toolchain the build was verified
+against locally — JDK 17, Android SDK API 34, build-tools 34.0.0.
 
-No signing key or secret is used or required by CI. The workflow holds no secrets.
+```yaml
+name: Android CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK packages
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Assemble debug APK
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitforge-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: app/build/test-results/testDebugUnitTest/*.xml
+          if-no-files-found: ignore
+```
+
+Until that file is added, run the same commands locally; the results are in
+[Build and test results](#build-and-test-results). No signing key or secret is used or
+required, by CI or by the build.
 
 ---
 

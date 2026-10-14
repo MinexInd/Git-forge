@@ -1,0 +1,74 @@
+# GitForge — repository notes for agents
+
+GitForge is a native Android app (Kotlin, Jetpack Compose, Material 3, MVVM) for
+editing GitHub repositories on a phone, with a real in-app shell, Git and Python.
+
+## Build environment
+
+The toolchain is **not** on `PATH` by default in this container. Set it explicitly:
+
+```bash
+export JAVA_HOME=/workspace/tools/jdk-17.0.20.1+1
+export ANDROID_HOME=/workspace/android-sdk
+export PATH=$JAVA_HOME/bin:$PATH
+```
+
+`gradlew --no-daemon` is reliable here. A full `testDebugUnitTest` run takes about two
+minutes; the first build in a session is much slower than later incremental ones.
+
+Signing uses environment variables, never a committed file:
+
+```bash
+export GITFORGE_KEYSTORE_PATH=/workspace/gitforge-release/gitforge-release.jks
+export GITFORGE_KEYSTORE_PASSWORD=...
+export GITFORGE_KEY_ALIAS=gitforge
+export GITFORGE_KEY_PASSWORD=...
+./gradlew --no-daemon :app:assembleRelease :app:bundleRelease
+```
+
+Outputs: `app/build/outputs/apk/{debug,release}/`, `app/build/outputs/bundle/release/`.
+
+## Verifying an APK without a device
+
+`aapt2 dump badging` gives package, versionCode, versionName, label, min/target SDK,
+ABIs and the launchable activity; `apksigner verify --print-certs` gives the signing
+certificate. Both are in `$ANDROID_HOME/build-tools/34.0.0/`. There is no emulator or
+device in this environment, so an install is never verified — do not claim otherwise.
+
+## Token scopes (this matters)
+
+- `GITHUB_TOKEN` is a **GitHub App integration token** with `repo` only. It cannot
+  create pull requests (403 "Resource not accessible by integration") and cannot push
+  under `.github/workflows/`.
+- The user-supplied PAT authenticates as `rajyv13` with `repo, write:packages`. Use it
+  for pull requests and releases. It **also lacks `workflow` scope**, so a CI workflow
+  file cannot be pushed with either credential. The README prints the workflow inline
+  instead of claiming a pipeline exists.
+
+Create PRs and releases through the REST API with that PAT; the `create_pr` tool's
+MCP token has no access to this repository.
+
+## Signing-key history (do not repeat this mistake)
+
+The `V1.0.0` release was signed with a keystore that no longer exists — it only lived
+in a container that has since been reset. `V1.1.0` is therefore signed with a **new**
+key (`/workspace/gitforge-release/gitforge-release.jks`, SHA-256
+`5b289f0c27fb56e0fb752eb60ec7f1738bee13ef75ae3e9b5697a01882fb4e8f`), and Android
+refuses to install it over V1.0.0.
+
+Consequences to preserve in any future work:
+
+- The debug key (`a04abf7f…`) and release key differ, so a debug APK can never update
+  a release install. The in-app updater enforces this by channel and says why.
+- From V1.1.0 onward the certificate is stable; keep using **this** keystore.
+- Do not regenerate a keystore "to be safe" — it silently breaks every existing
+  install. Back it up outside the container.
+
+## Honesty rules for this repository
+
+The README has an "Unverified work" section and the project has previously overstated
+CI and version details. When editing documentation:
+
+- Verify claims against the repository and the live GitHub API before writing them.
+- State plainly what was not run — no device, no GitHub account, no CI.
+- Report test counts from the JUnit XML in `app/build/test-results/`, not from memory.
