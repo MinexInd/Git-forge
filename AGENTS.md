@@ -64,6 +64,26 @@ Consequences to preserve in any future work:
 - Do not regenerate a keystore "to be safe" — it silently breaks every existing
   install. Back it up outside the container.
 
+## GitHub sign-in: do not reintroduce these
+
+Sign-in is the OAuth **device flow** (RFC 8628), opened in the **browser**. Two
+approaches were tried and removed; do not bring them back:
+
+- **A floating overlay window** to show the code over the browser. It needed
+  `SYSTEM_ALERT_WINDOW`, which Play restricts for untrusted apps and users refuse.
+  Removed in 1.1.1. The code is copied to the clipboard and the verification page is
+  opened with `ACTION_VIEW` instead.
+- **A user-editable client ID in Settings.** It was persisted but could not change which
+  OAuth app GitHub had registered, so it only invited users to paste a value with no
+  effect. The client ID is now a build-time constant:
+  `BuildConfig.DEFAULT_OAUTH_CLIENT_ID`, set with `-PGITFORGE_OAUTH_CLIENT_ID=...` or the
+  default in `app/build.gradle.kts`.
+
+**Do not switch to GitHub's browser (web) OAuth flow.** It requires a `client_secret` at
+the token exchange step — GitHub marks it required and has no public-client concept — so
+using it would mean embedding a secret in the APK. The device flow is the only
+secret-free option. This is a hard requirement, not a preference.
+
 ## Honesty rules for this repository
 
 The README has an "Unverified work" section and the project has previously overstated
