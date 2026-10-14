@@ -235,7 +235,9 @@ JGit credentials provider.
 
 ### 1. Install a JDK
 
-GitForge builds with **JDK 17** or **JDK 21**. Either works; JDK 21 is used in CI.
+GitForge builds with **JDK 17** or **JDK 21**. Either works. The build was verified on
+JDK 17 (see [Build and test results](#build-and-test-results)); CI is not active, so
+there is no second toolchain in use to point at.
 
 - Download from [Adoptium Temurin](https://adoptium.net/temurin/releases/?version=21)
   or install Microsoft's OpenJDK.
@@ -898,6 +900,15 @@ This section exists so nothing is overstated.
    APK has been downloaded to a device and installed through the system installer.
    The signature-continuity check in particular needs a device to confirm it behaves
    as intended for a matching and a mismatching key.
+8. **CI is not active.** No workflow file is in the repository, so nothing has run on
+   GitHub Actions. The workflow is written out in
+   [Continuous integration](#continuous-integration) for a maintainer to add; it could
+   not be pushed because the available tokens lacked the `workflow` scope. Every build
+   and test result in this document comes from a local run, not from CI.
+9. **The published V1.1.0 cannot be installed over V1.0.0.** The V1.0.0 keystore was
+   lost, so V1.1.0 is signed with a new key and Android rejects the upgrade. This is
+   documented rather than fixed: it cannot be fixed without the original key. From
+   V1.1.0 onward the certificate is stable.
 
 ### Fixed in 1.0.1
 
@@ -959,7 +970,8 @@ and a regression test pins that behaviour.
 
 ```
 GitForge/
-├── .github/workflows/android.yml   CI: build, test, upload APK
+├── .github/                        absent: the CI workflow is documented but not
+│                                    yet pushed, see "Continuous integration"
 ├── app/
 │   ├── build.gradle.kts            Module config, dependencies, signing
 │   ├── proguard-rules.pro          Keep rules for JGit and serialization
@@ -984,14 +996,76 @@ GitForge/
 
 ## Continuous integration
 
-`.github/workflows/android.yml` runs on every push and pull request:
+**GitForge does not currently run CI.** There is no workflow file in the repository.
+One was written and reviewed, but pushing anything under `.github/workflows/` requires
+a token with the `workflow` scope, and the credentials available during development
+had only `repo`. GitHub rejected the push, so the file was left out rather than the
+documentation claiming a pipeline that does not exist.
 
-- sets up JDK 17 and the Android SDK (API 34);
-- runs `./gradlew testDebugUnitTest`;
-- runs `./gradlew assembleDebug`;
-- uploads `app-debug.apk` as a workflow artifact.
+To enable it, a maintainer with `workflow` scope can save the following as
+`.github/workflows/android.yml`, or add it through the GitHub web UI. It contains no
+secrets and no signing material, and it uses the same toolchain the build was verified
+against locally — JDK 17, Android SDK API 34, build-tools 34.0.0.
 
-No signing key or secret is used or required by CI. The workflow holds no secrets.
+```yaml
+name: Android CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK packages
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Assemble debug APK
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitforge-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: app/build/test-results/testDebugUnitTest/*.xml
+          if-no-files-found: ignore
+```
+
+Until that file is added, run the same commands locally; the results are in
+[Build and test results](#build-and-test-results). No signing key or secret is used or
+required, by CI or by the build.
 
 ---
 
