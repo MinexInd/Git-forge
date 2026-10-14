@@ -303,14 +303,25 @@ app\build\outputs\apk\debug\app-debug.apk
 ```
 
 That path is produced by the standard Android Gradle Plugin layout; it is the file
-the build actually wrote. On this repository's build machine the verified output was:
+the build actually wrote. On the build machine used for this release the verified
+outputs were:
 
 ```
-/workspace/project/app/build/outputs/apk/debug/app-debug.apk
+app/build/outputs/apk/debug/app-debug.apk      22.7 MB
+app/build/outputs/apk/release/app-release.apk  15.5 MB
+app/build/outputs/bundle/release/app-release.aab  15.2 MB
 ```
 
-with size ≈ 22.7 MB, package `com.projecthub.gitforge`, version name `1.0.0`,
-`minSdk 26`, `targetSdk 34`, launcher activity `com.projecthub.gitforge.MainActivity`.
+Both APKs were inspected with `aapt2` and report package `com.projecthub.gitforge`,
+version code `3`, version name `1.1.0`, label `GitForge`, `minSdk 26`, `targetSdk 34`,
+launcher activity `com.projecthub.gitforge.MainActivity`, and native ABIs
+`arm64-v8a`, `armeabi-v7a`, `x86_64`. The release APK was verified with `apksigner` as
+signed by `CN=GitForge, OU=Release, O=ProjectHub`.
+
+The debug and release APKs are signed with **different** certificates, which is
+expected: the debug build uses the Android debug key. An installed release build will
+not accept a debug APK as an update, and the in-app updater refuses the swap rather
+than letting the installer fail.
 
 ### Installing on a device
 
