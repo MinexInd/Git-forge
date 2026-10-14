@@ -36,6 +36,13 @@ Requires Android 8.0 (API 26) or newer. The APK is signed and targets `arm64-v8a
 > **Version 1.1.0 adds in-app updates.** Once 1.1.0 or later is installed, GitForge
 > checks GitHub for a newer build on launch and can download and install it without a
 > computer. See [Updating GitForge](#updating-gitforge).
+>
+> ⚠️ **Upgrading from V1.0.0 needs a one-time uninstall.** V1.0.0 was signed with a
+> keystore that is no longer available, so Android will refuse to install V1.1.0 over
+> it. Uninstall V1.0.0 first — **which deletes the app's private storage, including
+> cloned repositories**, so export or push anything you need first. Every update after
+> 1.1.0 works in place. Details under
+> [Installing over an existing copy](#installing-over-an-existing-copy).
 
 If you would rather build it yourself, see
 [Building the APK](#building-the-apk) below — that path does need the SDK.
@@ -572,6 +579,14 @@ keytool -genkeypair -v `
 Keep this file and its passwords somewhere safe and backed up. Losing it means you
 can no longer update an app already published under it.
 
+> **This is not hypothetical.** The V1.0.0 release's keystore was lost, so V1.1.0 had
+> to be signed with a new key and V1.0.0 users must uninstall before upgrading — losing
+> their app-private storage with it. Back the keystore up somewhere durable before
+> publishing anything, and record which key signed each release.
+>
+> If you are publishing updates to an app you built earlier, re-use **that** keystore.
+> Generating a new one silently breaks every existing install.
+
 ### 2. Build with the secrets in the environment
 
 PowerShell:
@@ -666,11 +681,22 @@ Android replaces an installed app in place when the new APK has a higher
 credentials are untouched by an update because they live in app-private storage that
 the installer does not clear.
 
-If you installed a build signed with a *different* key — for example an earlier
+**The V1.0.0 → V1.1.0 step is the exception.** The V1.0.0 release was signed with a
+keystore that is no longer available, so V1.1.0 is signed with a new key and Android
+will refuse to install it over V1.0.0. This is a one-time step:
+
+1. Export or push anything you need from the repositories in GitForge.
+2. Uninstall V1.0.0. **This deletes the app's private storage, including cloned
+   repositories.**
+3. Install V1.1.0.
+
+From V1.1.0 onward the certificate is stable, so every later update installs in place
+and this does not recur. If you still hold the original V1.0.0 keystore, a maintainer
+can re-sign V1.1.0 with it and the one-time uninstall is not needed.
+
+More generally, if you installed a build signed with a *different* key — an earlier
 hand-built debug APK, or a release built with your own keystore — Android will refuse
-the update and you must uninstall the old copy first. **Uninstalling removes the
-app's private storage, including cloned repositories.** Export anything you need
-first. To avoid this, install 1.1.0 or later and stay on the same channel.
+the update and you must uninstall the old copy first, with the same storage caveat.
 
 ### Granting install permission
 
