@@ -41,18 +41,44 @@ device in this environment, so an install is never verified — do not claim oth
   create pull requests (403 "Resource not accessible by integration") and cannot push
   under `.github/workflows/`.
 - The user-supplied PAT authenticates as `rajyv13` with `repo, write:packages`. Use it
-  for pull requests and releases. It **also lacks `workflow` scope**, so a CI workflow
-  file cannot be pushed with either credential. The `PUT .../contents/...` API returns
-  404 for the same reason.
+  for pull requests and releases. It **lacks `workflow` scope**, so a *classic* token
+  push that adds or edits a file under `.github/workflows/` is rejected:
 
-Because a commit that contains `.github/workflows/` makes **every** push of that branch
-fail, do not commit the workflow file. It is kept on disk untracked (and listed in
-`.git/info/exclude`) for a maintainer to add through the GitHub web UI, which needs no
-scope. The README's Continuous integration section documents this, and the file content
-is posted inline on the CI pull request so it can be copied.
+  ```text
+  refusing to allow a Personal Access Token to create or update workflow
+  `.github/workflows/build-apk.yml` without `workflow` scope
+  ```
+
+  and the equivalent `PUT .../contents/.github/workflows/...` call returns 404.
+
+- Workaround that worked: the workflow file was added through the GitHub **web UI** (no
+  scope needed) and merged, so `.github/workflows/build-apk.yml` is now on `main`.
+  **Do not re-push a branch whose history rewrites that file** without a `workflow`-scoped
+  credential; editing its content requires the scope even though the file already exists.
 
 Create PRs and releases through the REST API with that PAT; the `create_pr` tool's
 MCP token has no access to this repository.
+
+## Android SDK in CI
+
+`android-actions/setup-android@v3` defaults to `packages: tools platform-tools`. The
+legacy `tools` package was removed from Google's SDK repository, so that default makes
+`sdkmanager` exit 1 and the job dies before the build:
+
+```text
+Warning: Failed to find package 'tools'
+Error: The process '.../sdkmanager' failed with exit code 1
+```
+
+Always pass explicit packages:
+
+```yaml
+packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+```
+
+This was verified: `sdkmanager --list | grep -c '^  tools '` returns 0 on a current SDK,
+and a local `./gradlew --no-daemon assembleDebug assembleRelease` with those packages
+produces `app-debug.apk` (22.7 MB) and `app-release-unsigned.apk` (15.5 MB).
 
 ## Signing-key history (do not repeat this mistake)
 

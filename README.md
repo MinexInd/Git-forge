@@ -1055,31 +1055,26 @@ GitForge/
 
 ## Continuous integration
 
-**GitForge does not currently run CI.** There is no workflow file in the repository.
-`.github/workflows/build-apk.yml` is written, reviewed and committed on the
-`ci/build-apk-workflow` branch, but GitHub refuses to accept any file under
-`.github/workflows/` without a credential carrying the **`workflow`** scope, and the
-token used here has only `repo` and `write:packages`. The push is rejected with:
+`.github/workflows/build-apk.yml` builds GitForge on every push to `main`, on manual
+dispatch, and when a release is published. It runs `./gradlew assembleDebug
+assembleRelease`, uploads both APKs as workflow artifacts, and attaches them to the
+release when the trigger is a release. It carries no secrets and no signing material.
 
-```text
-refusing to allow a Personal Access Token to create or update workflow
-`.github/workflows/build-apk.yml` without `workflow` scope
+The workflow pins the SDK packages it installs:
+
+```yaml
+packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
 ```
 
-and the equivalent API call, `PUT .../contents/.github/workflows/build-apk.yml`, returns
-`404 Not Found`. The file was therefore left out of `main` rather than the documentation
-claiming a pipeline that does not exist.
+That is not decoration. `android-actions/setup-android@v3` defaults to
+`packages: tools platform-tools`, and the legacy `tools` package no longer exists in
+Google's SDK repository, so `sdkmanager tools` exits 1 and the job fails in the SDK step
+before it builds anything. The first run of this workflow failed exactly that way:
 
-### Adding it
-
-The workflow builds `assembleDebug` and `assembleRelease` on push to `main`, on manual
-dispatch, and when a release is published, uploads both APKs as artifacts, and attaches
-them to the release. It carries no secrets and no signing material. Add it by one of:
-
-- the GitHub web UI, which needs no token;
-- a classic token with the `workflow` scope;
-- a fine-grained token with **Workflows: write**;
-- cherry-picking `ci/build-apk-workflow`.
+```text
+Warning: Failed to find package 'tools'
+Error: The process '.../sdkmanager' failed with exit code 1
+```
 
 ### Its release APK is unsigned
 
@@ -1092,9 +1087,16 @@ differs from the release key, so a debug APK can never be installed over a relea
 
 ### Running the same checks locally
 
-CI would mirror the local toolchain: JDK 17, Android SDK API 34, build-tools 34.0.0. The
-recorded results are in [Build and test results](#build-and-test-results). No signing key
-or secret is used or required by the build.
+CI mirrors the local toolchain: JDK 17, Android SDK API 34, build-tools 34.0.0. To get
+the same result without waiting on a runner:
+
+```console
+gradlew.bat assembleDebug assembleRelease
+```
+
+The recorded results are in [Build and test results](#build-and-test-results). No signing
+key or secret is used or required by the build.
+
 
 
 ---
