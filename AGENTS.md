@@ -42,8 +42,14 @@ device in this environment, so an install is never verified — do not claim oth
   under `.github/workflows/`.
 - The user-supplied PAT authenticates as `rajyv13` with `repo, write:packages`. Use it
   for pull requests and releases. It **also lacks `workflow` scope**, so a CI workflow
-  file cannot be pushed with either credential. The README prints the workflow inline
-  instead of claiming a pipeline exists.
+  file cannot be pushed with either credential. The `PUT .../contents/...` API returns
+  404 for the same reason.
+
+Because a commit that contains `.github/workflows/` makes **every** push of that branch
+fail, do not commit the workflow file. It is kept on disk untracked (and listed in
+`.git/info/exclude`) for a maintainer to add through the GitHub web UI, which needs no
+scope. The README's Continuous integration section documents this, and the file content
+is posted inline on the CI pull request so it can be copied.
 
 Create PRs and releases through the REST API with that PAT; the `create_pr` tool's
 MCP token has no access to this repository.
