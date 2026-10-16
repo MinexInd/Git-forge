@@ -131,16 +131,15 @@ class UpdateManager(private val context: Context) {
                 )
             }
 
+            // Fail closed: only a clean bill (null) proceeds. Every other
+            // verdict — mismatch, unreadable certs, or any future variant —
+            // discards the download instead of installing it.
             when (val signerCheck = compareSigners(target)) {
-                is InstallResult.SignatureMismatch -> {
-                    target.delete()
-                    return@withContext signerCheck
-                }
-                is InstallResult.Failed -> {
-                    target.delete()
-                    return@withContext signerCheck
-                }
                 null -> Unit
+                else -> {
+                    target.delete()
+                    return@withContext signerCheck
+                }
             }
 
             onProgress(UpdateProgress.ReadyToInstall)

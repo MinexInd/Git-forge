@@ -2,6 +2,7 @@ package com.projecthub.gitforge.terminal.shell
 
 import com.projecthub.gitforge.core.AppLog
 import com.projecthub.gitforge.terminal.TerminalLine
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
