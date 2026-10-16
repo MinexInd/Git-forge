@@ -94,8 +94,9 @@ internal val TEXT_BUILTINS: List<BuiltinCommand> = listOf(
                 if (hits > 0) {
                     exitCode = 0
                     if (filesOnly) out.append("$label\n")
-                    if (countOnly) out.append(if (label.isEmpty()) "$hits\n" else "$label:$hits\n")
                 }
+                // `grep -c` reports 0 for a file with no match, same as GNU grep.
+                if (countOnly) out.append(if (label.isEmpty()) "$hits\n" else "$label:$hits\n")
             }
 
             if (targets.isEmpty()) {
