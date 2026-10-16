@@ -45,7 +45,38 @@ internal val TEXT_BUILTINS: List<BuiltinCommand> = listOf(
             var exitCode = 1
 
             fun scan(file: File, label: String) {
-                val lines = runCatching { file.readLines() }.getOrNull() ?: return
+                // Cap the scan so a huge log cannot OOM the shell; note truncation.
+                val lines = runCatching {
+                    file.inputStream().buffered().reader(Charsets.UTF_8).use { reader ->
+                        val acc = mutableListOf<String>()
+                        var chars = 0
+                        val buf = CharArray(8192)
+                        val cur = StringBuilder()
+                        var truncated = false
+                        fun flushLine() {
+                            acc += cur.toString()
+                            cur.setLength(0)
+                        }
+                        while (true) {
+                            val n = reader.read(buf)
+                            if (n <= 0) break
+                            var k = 0
+                            while (k < n) {
+                                if (chars >= BuiltinRegistry.MAX_INPUT_BYTES) {
+                                    truncated = true
+                                    break
+                                }
+                                val c = buf[k++]
+                                chars++
+                                if (c == '\n') flushLine() else cur.append(c)
+                            }
+                            if (truncated) break
+                        }
+                        if (cur.isNotEmpty()) acc += cur.toString()
+                        if (acc.size > 200_000) acc.subList(200_000, acc.size).clear()
+                        acc
+                    }
+                }.getOrNull() ?: return
                 var hits = 0
                 lines.forEachIndexed { index, line ->
                     val isMatch = regex.containsMatchIn(line) != invert
@@ -469,6 +500,9 @@ internal val TEXT_BUILTINS: List<BuiltinCommand> = listOf(
             if (!left.exists()) return BuiltinRegistry.err("diff: ${positional[0]}: No such file or directory", 2)
             if (!right.exists()) return BuiltinRegistry.err("diff: ${positional[1]}: No such file or directory", 2)
 
+            if (left.length() > BuiltinRegistry.MAX_INPUT_BYTES || right.length() > BuiltinRegistry.MAX_INPUT_BYTES) {
+                return BuiltinRegistry.err("diff: file too large for a line-by-line diff")
+            }
             val leftLines = left.readLines()
             val rightLines = right.readLines()
             val out = StringBuilder()

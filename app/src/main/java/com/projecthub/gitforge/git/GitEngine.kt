@@ -248,7 +248,17 @@ class GitEngine {
                 val command = git.branchCreate().setName(name)
                 if (checkout) command.setUpstreamMode(org.eclipse.jgit.api.CreateBranchCommand.SetupUpstreamMode.NOTRACK)
                 command.call()
-                if (checkout) git.checkout().setName(name).call()
+                if (checkout) {
+                    try {
+                        git.checkout().setName(name).call()
+                    } catch (checkoutFailure: Throwable) {
+                        // The branch now exists but the checkout failed: roll the
+                        // ref back so a retry reports "could not create" truthfully
+                        // instead of "already exists".
+                        runCatching { git.branchDelete().setBranchNames(name).setForce(true).call() }
+                        throw checkoutFailure
+                    }
+                }
             } catch (t: Throwable) {
                 throw t.asGitException("Could not create branch $name")
             }
@@ -482,6 +492,13 @@ class GitEngine {
                     .setMode(org.eclipse.jgit.api.ResetCommand.ResetType.HARD)
                     .setRef("HEAD")
                     .call()
+                // A hard reset restores the tree but JGit leaves the merge
+                // bookkeeping behind; remove it so the repo is usable again.
+                // (This mirrors `git merge --abort`: reset + clear MERGE_* state.)
+                val gitDir = git.repository.directory
+                for (name in listOf("MERGE_HEAD", "MERGE_MSG", "MERGE_MODE", "ORIG_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD")) {
+                    runCatching { File(gitDir, name).delete() }
+                }
             } catch (t: Throwable) {
                 throw t.asGitException("Could not abort the merge")
             }
@@ -548,9 +565,9 @@ class GitEngine {
     /** Translates JGit's merge status name into the app's own enum. */
     private fun jgitMergeStatus(name: String): MergeStatus = when (name) {
         "ALREADY_UP_TO_DATE" -> MergeStatus.ALREADY_UP_TO_DATE
-        "FAST_FORWARD" -> MergeStatus.FAST_FORWARD
-        "MERGED" -> MergeStatus.MERGED
-        "CONFLICTING" -> MergeStatus.CONFLICTING
+        "FAST_FORWARD", "FAST_FORWARD_SQUASHED" -> MergeStatus.FAST_FORWARD
+        "MERGED", "MERGED_SQUASHED" -> MergeStatus.MERGED
+        "CONFLICTING", "CHECKOUT_CONFLICT" -> MergeStatus.CONFLICTING
         else -> MergeStatus.FAILED
     }
 
