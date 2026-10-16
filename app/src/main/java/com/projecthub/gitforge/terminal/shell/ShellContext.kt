@@ -141,3 +141,4 @@ object GlobExpander {
         sb.append("$")
         return Regex(sb.toString())
     }
+}
