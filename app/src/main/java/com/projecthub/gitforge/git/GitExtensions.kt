@@ -80,8 +80,9 @@ fun DiffEntry.toFileDiff(repository: Repository, maxLines: Int = 2000): FileDiff
 private fun AbbreviatedObjectId.toObjectId(repository: Repository): ObjectId? = runCatching {
     // NOTE: `this@toObjectId` — a bare `this` inside `use {}` would bind to the
     // ObjectReader receiver instead of the abbreviated id being resolved.
-    if (name().length >= 40) ObjectId.fromString(name())
+    val resolved: ObjectId? = if (name().length >= 40) ObjectId.fromString(name())
     else repository.newObjectReader().use { reader -> reader.resolve(this@toObjectId) }
+    resolved
 }.getOrNull()
 
 /**
