@@ -80,7 +80,7 @@ class AnsiParserTest {
     @Test
     fun `an SGR sequence split across chunks does not leak literally`() {
         val first = parser.parse("\u001B[3", "")
-        val second = parser.parse("1mred\\n", first.carry)
+        val second = parser.parse("1mred\n", first.carry)
         assertTrue(second.lines.any { it.first.contains("red") })
         assertFalse((second.lines.map { it.first } + second.carry).any { it.contains("\u001B[3") })
     }

@@ -297,7 +297,7 @@ class ShellEngineTest {
         session.run("export FOO=expanded")
         // \$FOO keeps the dollar literal; a bare $FOO is a Kotlin template.
         val result = session.run("echo '\$FOO'")
-        assertEquals("'FOO'", result.stdout.trim())
+        assertEquals("\$FOO", result.stdout.trim())
         assertFalse(result.stdout.contains("expanded"))
     }
 
