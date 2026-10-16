@@ -295,8 +295,9 @@ class ShellEngineTest {
         val dir = temp.newFolder("work")
         val session = Session(dir)
         session.run("export FOO=expanded")
-        val result = session.run("echo '$FOO'")
-        assertEquals("""'""" + "FOO" + """'""", result.stdout.trim())
+        // \$FOO keeps the dollar literal; a bare $FOO is a Kotlin template.
+        val result = session.run("echo '\$FOO'")
+        assertEquals("'FOO'", result.stdout.trim())
         assertFalse(result.stdout.contains("expanded"))
     }
 
@@ -305,7 +306,7 @@ class ShellEngineTest {
         val dir = temp.newFolder("work")
         val session = Session(dir)
         session.run("export FOO=expanded")
-        val result = session.run("echo \"$FOO\"")
+        val result = session.run("echo \"\$FOO\"")
         assertTrue(result.stdout.contains("expanded"))
     }
 
@@ -353,7 +354,7 @@ class ShellEngineTest {
         val dir = temp.newFolder("work")
         val session = Session(dir)
         session.run("env LEAK_TEST=1 true")
-        val result = session.run("echo $LEAK_TEST")
+        val result = session.run("echo \$LEAK_TEST")
         assertEquals("", result.stdout.trim())
     }
 }
