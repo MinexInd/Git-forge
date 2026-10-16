@@ -50,6 +50,7 @@ class TerminalSession(
         _output.value = buffer.toList()
     }
 
+    @kotlin.jvm.Synchronized
     fun appendText(text: String, stream: TerminalLine.Stream) {
         if (text.isEmpty()) return
         val outcome = parser.parse(text, carry)
@@ -61,7 +62,7 @@ class TerminalSession(
             // Show the partial line so interactive output appears promptly; it is
             // replaced as soon as the line is completed.
             _output.update { existing ->
-                val withoutTail = existing.filterNot { it.stream == TerminalLine.Stream.SYSTEM && it.text.startsWith(TAIL_MARKER) }
+                val withoutTail = existing.filterNot { it.text.startsWith(TAIL_MARKER) }
                 (withoutTail + TerminalLine("$TAIL_MARKER$carry", stream, currentStyle)).takeLast(scrollbackLimit)
             }
         }
@@ -126,7 +127,9 @@ class TerminalSession(
     val isRunning: Boolean get() = engine.isRunning
 
     /** Plain text of the whole buffer, for copy-to-clipboard. */
-    fun asPlainText(): String = buffer.joinToString("\n") { it.text }
+    fun asPlainText(): String = buffer.joinToString("\n") {
+        it.text.removePrefix(TAIL_MARKER)
+    }
 
     companion object {
         private const val TAIL_MARKER = "\u0000TAIL\u0000"
@@ -149,7 +152,6 @@ class TerminalSessionManager(
     private val scope: CoroutineScope,
 ) {
 
-    private val parser = AnsiParser()
     private val nextId = java.util.concurrent.atomic.AtomicLong(1)
     private val sessions = linkedMapOf<Long, TerminalSession>()
 
@@ -186,7 +188,10 @@ class TerminalSessionManager(
             name = name ?: "Session $id",
             context = context,
             engine = buildEngine(),
-            parser = parser,
+            // Each session gets its own parser: AnsiParser keeps style/carry
+            // state and is fed from stdout/stderr reader threads, so sharing one
+            // across sessions corrupts colours and races on style fields.
+            parser = AnsiParser(),
             scrollbackLimit = scrollbackLimit(),
         )
         sessions[id] = session
@@ -206,6 +211,9 @@ class TerminalSessionManager(
 
     fun close(id: Long) {
         val session = sessions.remove(id) ?: return
+        // Cancel first: closing during `npm install` must kill the child
+        // process instead of leaking it after the UI is gone.
+        runCatching { kotlinx.coroutines.runBlocking { session.cancel() } }
         session.clear()
         _sessionIds.value = sessions.keys.toList()
         if (_activeId.value == id) _activeId.value = sessions.keys.firstOrNull() ?: -1L
