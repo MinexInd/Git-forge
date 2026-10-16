@@ -78,11 +78,13 @@ fun DiffEntry.toFileDiff(repository: Repository, maxLines: Int = 2000): FileDiff
  * keeps the diff working for those entries.
  */
 private fun AbbreviatedObjectId.toObjectId(repository: Repository): ObjectId? = runCatching {
-    // NOTE: `this@toObjectId` — a bare `this` inside `use {}` would bind to the
-    // ObjectReader receiver instead of the abbreviated id being resolved.
-    val resolved: ObjectId? = if (name().length >= 40) ObjectId.fromString(name())
-    else repository.newObjectReader().use { reader -> reader.resolve(this@toObjectId) }
-    resolved
+    if (name().length >= 40) {
+        ObjectId.fromString(name())
+    } else {
+        // resolve() returns every object matching the prefix; an abbreviated
+        // diff id must match exactly one, otherwise fall back to the worktree.
+        repository.newObjectReader().use { reader -> reader.resolve(this@toObjectId).singleOrNull() }
+    }
 }.getOrNull()
 
 /**
